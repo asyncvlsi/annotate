@@ -29,6 +29,60 @@
 #define MAP_MK_REF(x) ((ActId *) (((unsigned long)(x))|2))
 #define MAP_IS_REF(x) (((unsigned long)x) & 2)
 
+static void spef_warning (LEX_T *l, const char *s)
+{
+  warning ("SPEF parsing error: looking-at: `%s'\n\t%s\n%s",
+	   lex_tokenstring (l), s, lex_errstring (l));
+}
+
+static int lex_have_number (LEX_T *l, float *d)
+{
+  if (lex_sym (l) == l_integer) {
+    *d = lex_integer (l);
+    lex_getsym (l);
+    return 1;
+  }
+  else if (lex_sym (l) == l_real) {
+    *d = lex_real (l);
+    lex_getsym (l);
+    return 1;
+  }
+  return 0;
+}
+
+static int lex_have_number (LEX_T *l, double *d)
+{
+  if (lex_sym (l) == l_integer) {
+    *d = lex_integer (l);
+    lex_getsym (l);
+    return 1;
+  }
+  else if (lex_sym (l) == l_real) {
+    *d = lex_real (l);
+    lex_getsym (l);
+    return 1;
+  }
+  return 0;
+}
+
+#define SKIP_SC_OPTIONAL			\
+   do {						\
+     if (lex_have (_l, _star_sc)) {		\
+       while (lex_have (_l, l_integer)) {	\
+	 float dummy;				\
+	 if (!lex_have (_l, _tok_colon)) {	\
+	   spef_warning (_l, "*SC error");	\
+	   return false;			\
+	 }					\
+	 if (!lex_have_number (_l, &dummy)) {	\
+	   spef_warning (_l, "*SC error");	\
+	   return false;			\
+	 }					\
+       }					\
+     }						\
+   } while (0)
+
+
 Spef::Spef()
 {
   _l = NULL;
@@ -182,6 +236,9 @@ bool Spef::Read (FILE *fp)
     return false;
   }
 
+  if (!lex_eof (_l)) {
+    spef_warning (_l, "parsing ended without EOF?");
+  }
   lex_free (_l);
   _l = NULL;
   return true;
@@ -199,14 +256,14 @@ bool Spef::_read_header ()
 #define GET_STR(a,b,msg)			\
   do {						\
     if (!lex_have (_l, a)) {			\
-      warning ("SPEF parsing error: missing " msg);	\
+      spef_warning (_l, "missing " msg);	\
       return false;				\
     }						\
     if (lex_have (_l, l_string)) {		\
       b = _prevString ();			\
     }						\
     else {					\
-      warning ("SPEF parsing error: invalid " msg);	\
+      spef_warning (_l, "invalid " msg);	\
       return false;				\
     }						\
   } while (0)
@@ -219,18 +276,18 @@ bool Spef::_read_header ()
   GET_STR(_star_version, _version, "*VERSION in header");
 
   if (!lex_have (_l, _star_design_flow)) {
-    warning ("SPEF parsing error: missing *DESIGN_FLOW in header");
+    spef_warning (_l, "missing *DESIGN_FLOW in header");
     return false;
   }
   if (lex_sym (_l) != l_string) {
-    warning ("SPEF parsing error: invalid *DESIGN_FLOW in header");
+    spef_warning (_l, "invalid *DESIGN_FLOW in header");
   }
   while (lex_have (_l, l_string)) {
     /* grab string (page 592: check strings here) */
   }
     
   if (!lex_have (_l, _star_divider)) {
-    warning ("SPEF parsing error: missing *DIVIDER in header");
+    spef_warning (_l, "missing *DIVIDER in header");
   }
   /* ., /, :, or | */
   if (strcmp (lex_tokenstring (_l), ".") == 0 ||
@@ -240,14 +297,14 @@ bool Spef::_read_header ()
     _tok_hier_delim = lex_addtoken (_l, lex_tokenstring (_l));
   }
   else {
-    warning ("SPEF parsing error: *DIVIDER must be one of . / : |");
+    spef_warning (_l, "*DIVIDER must be one of . / : |");
     return false;
   }
 
   lex_getsym (_l);
   
   if (!lex_have (_l, _star_delimiter)) {
-    warning ("SPEF parsing error: missing *DELIMITER in header");
+    spef_warning (_l, "missing *DELIMITER in header");
     return false;
   }
   /* ., /, :, or | */
@@ -258,14 +315,14 @@ bool Spef::_read_header ()
     _tok_pin_delim = lex_addtoken (_l, lex_tokenstring (_l));
   }
   else {
-    warning ("SPEF parsing error: *DELIMITER must be one of . / : |");
+    spef_warning (_l, "*DELIMITER must be one of . / : |");
     return false;
   }
 
   lex_getsym (_l);
   
   if (!lex_have (_l, _star_bus_delimiter)) {
-    warning ("SPEF parsing error: missing *BUS_DELIMITER in header");
+    spef_warning (_l, "missing *BUS_DELIMITER in header");
     return false;
   }
   if (strcmp (lex_tokenstring (_l), "[") == 0 ||
@@ -277,7 +334,7 @@ bool Spef::_read_header ()
     _tok_prefix_bus_delim = lex_addtoken (_l, lex_tokenstring (_l));
   }
   else {
-    warning ("SPEF parsing error: *BUS_DELIMITER must be one of [ { ( < : .");
+    spef_warning (_l, "*BUS_DELIMITER must be one of [ { ( < : .");
     return false;
   }
   lex_getsym (_l);
@@ -296,21 +353,15 @@ bool Spef::_read_units ()
 {
   double val;
   if (!lex_have (_l, _star_t_unit)) {
-    warning ("SPEF parsing error: *T_UNIT missing");
+    spef_warning (_l, "*T_UNIT missing");
     return false;
   }
-  if (lex_have (_l, l_integer)) {
-    val = lex_integer (_l);
-  }
-  else if (lex_have (_l, l_real)) {
-    val = lex_real (_l);
-  }
-  else {
-    warning ("SPEF parsing error: *T_UNIT expected number");
+  if (!lex_have_number (_l, &val)) {
+    spef_warning (_l, "*T_UNIT expected number");
     return false;
   }
   if (val < 0) {
-    warning ("SPEF parsing error: *T_UNIT expected positive number");
+    spef_warning (_l, "*T_UNIT expected positive number");
     return false;
   }
   if (lex_have_keyw (_l, "NS")) {
@@ -320,27 +371,21 @@ bool Spef::_read_units ()
     val = val*1e-12;
   }
   else {
-    warning ("SPEF parsing error: *T_UNIT expected NS or PS");
+    spef_warning (_l, "*T_UNIT expected NS or PS");
     return false;
   }
   _time_unit = val;
 
   if (!lex_have (_l, _star_c_unit)) {
-    warning ("SPEF parsing error: *C_UNIT missing");
+    spef_warning (_l, "*C_UNIT missing");
     return false;
   }
-  if (lex_have (_l, l_integer)) {
-    val = lex_integer (_l);
-  }
-  else if (lex_have (_l, l_real)) {
-    val = lex_real (_l);
-  }
-  else {
-    warning ("SPEF parsing error: *C_UNIT expected number");
+  if (!lex_have_number (_l, &val)) {
+    spef_warning (_l, "*C_UNIT expected number");
     return false;
   }
   if (val < 0) {
-    warning ("SPEF parsing error: *C_UNIT expected positive number");
+    spef_warning (_l, "*C_UNIT expected positive number");
     return false;
   }
   if (lex_have_keyw (_l, "PF")) {
@@ -350,28 +395,22 @@ bool Spef::_read_units ()
     val = val*1e-15;
   }
   else {
-    warning ("SPEF parsing error: *C_UNIT expected PF or FF");
+    spef_warning (_l, "*C_UNIT expected PF or FF");
     return false;
   }
   _c_unit = val;
 
 
   if (!lex_have (_l, _star_r_unit)) {
-    warning ("SPEF parsing error: *R_UNIT missing");
+    spef_warning (_l, "*R_UNIT missing");
     return false;
   }
-  if (lex_have (_l, l_integer)) {
-    val = lex_integer (_l);
-  }
-  else if (lex_have (_l, l_real)) {
-    val = lex_real (_l);
-  }
-  else {
-    warning ("SPEF parsing error: *R_UNIT expected number");
+  if (!lex_have_number (_l, &val)) {
+    spef_warning (_l, "*R_UNIT expected number");
     return false;
   }
   if (val < 0) {
-    warning ("SPEF parsing error: *R_UNIT expected positive number");
+    spef_warning (_l, "*R_UNIT expected positive number");
     return false;
   }
   if (lex_have_keyw (_l, "OHM")) {
@@ -381,27 +420,21 @@ bool Spef::_read_units ()
     val = val*1e3;
   }
   else {
-    warning ("SPEF parsing error: *R_UNIT expected OHM or KOHM");
+    spef_warning (_l, "*R_UNIT expected OHM or KOHM");
     return false;
   }
   _r_unit = val;
 
   if (!lex_have (_l, _star_l_unit)) {
-    warning ("SPEF parsing error: *L_UNIT missing");
+    spef_warning (_l, "*L_UNIT missing");
     return false;
   }
-  if (lex_have (_l, l_integer)) {
-    val = lex_integer (_l);
-  }
-  else if (lex_have (_l, l_real)) {
-    val = lex_real (_l);
-  }
-  else {
-    warning ("SPEF parsing error: *L_UNIT expected number");
+  if (!lex_have_number (_l, &val)) {
+    spef_warning (_l, "*L_UNIT expected number");
     return false;
   }
   if (val < 0) {
-    warning ("SPEF parsing error: *L_UNIT expected positive number");
+    spef_warning (_l, "*L_UNIT expected positive number");
     return false;
   }
   if (lex_have_keyw (_l, "MH")) {
@@ -414,7 +447,7 @@ bool Spef::_read_units ()
     /* nothing */
   }
   else {
-    warning ("SPEF parsing error: *L_UNIT expected HENRY or MH or UH");
+    spef_warning (_l, "*L_UNIT expected HENRY or MH or UH");
     return false;
   }
   _l_unit = val;
@@ -437,22 +470,22 @@ bool Spef::_read_name_map ()
   while (strcmp (lex_tokenstring (_l), "*") == 0) {
     lex_getsym (_l);
     if (strcmp (lex_whitespace (_l), "") != 0) {
-      warning ("SPEF parsing: space after *, ignoring");
+      spef_warning (_l, "space after *, ignoring");
     }
-    if (lex_have (_l, l_integer)) {
+    if (lex_sym (_l) == l_integer) {
       /* we're good */
       b = ihash_lookup (_nH, lex_integer (_l));
       if (b) {
-	warning ("SPEF *NAME_MAP: duplicate integer %d; using latest map",
-		 lex_integer (_l));
+	spef_warning (_l, "duplicate integer; using latest map");
       }
       else {
 	b = ihash_add (_nH, lex_integer (_l));
 	b->v = NULL;
       }
+      lex_getsym (_l);
     }
     else {
-      warning ("SPEF parsing: missing integer after * in name map");
+      spef_warning (_l, "missing integer after * in name map");
       return false;
     }
 
@@ -461,7 +494,7 @@ bool Spef::_read_name_map ()
       b->v = _getTokPath ();
     }
     if (!b->v) {
-      warning ("SPEF parsing: *%ld error parsing name", b->key);
+      spef_warning (_l, "error parsing name");
       return false;
     }
   }
@@ -479,7 +512,7 @@ bool Spef::_read_power_def ()
       A_INC (_power_nets);
     }
     if (A_LEN (_power_nets) == 0) {
-      warning ("SPEF parsing: *POWER_NETS error");
+      spef_warning (_l, "*POWER_NETS error");
       return false;
     }
   }
@@ -491,12 +524,59 @@ bool Spef::_read_power_def ()
       A_INC (_gnd_nets);
     }
     if (A_LEN (_gnd_nets) == 0) {
-      warning ("SPEF parsing: *POWER_NETS error");
+      spef_warning (_l, "*POWER_NETS error");
       return false;
     }
   }
 
   return true;
+}
+
+bool Spef::_getPinPortInternal (spef_node *n)
+{
+  ActId *tmp, *tmp2;
+
+  lex_push_position (_l);
+
+  if ((tmp = _getIndex()) || (tmp = _getTokPath()) || (tmp = _getTokName())) {
+    if (_tok_pin_delim != -1 && lex_have (_l, _tok_pin_delim)) {
+      tmp2 = _getIndex();
+      if (!tmp2) {
+	tmp2 = _getTokPath ();
+      }
+      if (!tmp2) {
+	lex_set_position (_l);
+	lex_pop_position (_l);
+	spef_warning (_l, "port name error");
+	return false;
+      }
+      n->inst = tmp;
+      n->pin = tmp2;
+    }
+    else {
+      tmp2 = MAP_GET_PTR (tmp);
+      if (tmp2->Rest()) {
+	lex_set_position (_l);
+	lex_pop_position (_l);
+	spef_warning (_l, "port name error");
+	return false;
+      }
+      n->inst = NULL;
+      n->pin = tmp;
+    }
+    n->idx = -1;
+    if (_tok_pin_delim != -1 && lex_have (_l, _tok_pin_delim)) {
+      if (lex_sym (_l) == l_integer) {
+	n->idx = lex_integer (_l);
+	lex_getsym (_l);
+      }
+    }
+    lex_pop_position (_l);
+    return true;
+  }
+  lex_set_position (_l);
+  lex_pop_position (_l);
+  return false;
 }
 
 bool Spef::_getPortName (bool isphy, ActId **inst_name, ActId **port)
@@ -515,13 +595,14 @@ bool Spef::_getPortName (bool isphy, ActId **inst_name, ActId **port)
       if (!tmp2) {
 	lex_set_position (_l);
 	lex_pop_position (_l);
-	warning ("SPEF parsing: port name error");
+	spef_warning (_l, "port name error");
 	return false;
       }
 
       *inst_name = tmp;
       *port = tmp2;
 
+      lex_pop_position (_l);
       return true;
     }
     else {
@@ -529,14 +610,17 @@ bool Spef::_getPortName (bool isphy, ActId **inst_name, ActId **port)
       if (tmp2->Rest()) {
 	lex_set_position (_l);
 	lex_pop_position (_l);
-	warning ("SPEF parsing: port name error");
+	spef_warning (_l, "port name error");
 	return false;
       }
       *inst_name = NULL;
       *port = tmp;
+      lex_pop_position (_l);
       return true;
     }
   }
+  lex_set_position (_l);
+  lex_pop_position (_l);
   return false;
 }
 
@@ -585,7 +669,7 @@ bool Spef::_read_external_def ()
 
 	dir = lex_get_dir (_l);
 	if (dir == -1) {
-	  warning ("SPEF parsing: %s direction error", lex_tokenname (_l, tok));
+	  spef_warning (_l, "direction error");
 	  return false;
 	}
 	spef_attributes *a = _getAttributes ();
@@ -609,7 +693,7 @@ bool Spef::_read_external_def ()
 	}
       }
       if (!once) {
-	warning ("SPEF parsing: %s error", lex_tokenname (_l, tok));
+	spef_warning (_l, "unexpected error");
 	return false;
       }
     }
@@ -633,7 +717,7 @@ bool Spef::_read_define_def ()
 	A_INC (_defines);
       }
       if (idx == A_LEN (_defines)) {
-	warning ("SPEF parsing: *DEFINE error\n%s", lex_errstring (_l));
+	spef_warning (_l, "*DEFINE error");
 	return false;
       }
       char *str;
@@ -641,7 +725,7 @@ bool Spef::_read_define_def ()
 	str = _prevString();
       }
       else {
-	warning ("SPEF parsing: *DEFINE error\n%s", lex_errstring (_l));
+	spef_warning (_l, "*DEFINE error");
 	return false;
       }
       while (idx < A_LEN (_defines)) {
@@ -664,7 +748,7 @@ bool Spef::_read_define_def ()
 	A_NEXT (_defines).qstring = NULL;
       }
       else {
-	warning ("SPEF parsing: *PDEFINE error\n%s", lex_errstring (_l));
+	spef_warning (_l, "*PDEFINE error");
 	return false;
       }
       if (lex_have (_l, l_string)) {
@@ -673,7 +757,7 @@ bool Spef::_read_define_def ()
       }
       else {
 	A_INC (_defines);
-	warning ("SPEF parsing: *PDEFINE error\n%s", lex_errstring (_l));
+	spef_warning (_l, "*PDEFINE error");
 	return false;
       }
     }
@@ -695,19 +779,46 @@ bool Spef::_read_variation_def ()
 bool Spef::_read_internal_def ()
 {
   bool found = false;
+  spef_net *net;
+
+  A_INIT (_nets);
+  
   while (lex_sym (_l) == _star_d_net || lex_sym (_l) == _star_r_net ||
 	 lex_sym (_l) == _star_d_pnet || lex_sym (_l) == _star_r_pnet) {
+    bool phys = false;
+
     found = true;
 
-    if (lex_have (_l, _star_d_net)) {
-      ActId *net_name;
-      if (!((net_name = _getIndex()) || (net_name = _getTokPath()))) {
-	warning ("SPEF parsing: *D_NET error\n%s", lex_errstring (_l));
+    A_NEW (_nets, spef_net);
+    net = &A_NEXT (_nets);
+    A_INC (_nets);
+    net->net = NULL;
+
+    if (lex_sym (_l) == _star_d_net) {
+      net->type = 0;
+    }
+    else if (lex_sym (_l) == _star_d_pnet) {
+      net->type = 2;
+    }
+    else if (lex_sym (_l) == _star_r_net) {
+      net->type = 1;
+    }
+    else {
+      net->type = 3;
+    }
+
+    if (lex_sym (_l) == _star_d_pnet || lex_sym (_l) == _star_r_pnet) {
+      phys = true;
+    }
+
+    if (lex_have (_l, _star_d_net) || lex_have (_l, _star_d_pnet)) {
+      if (!((net->net = _getIndex()) || (!phys && (net->net = _getTokPath()))
+	    || (phys && (net->net = _getTokPhysicalRef())))) {
+	spef_warning (_l, "*D_NET error");
 	return false;
       }
-      spef_triplet tot_cap;
-      if (!_getParasitics (&tot_cap)) {
-	warning ("SPEF parsing: *D_NET error\n%s", lex_errstring (_l));
+      if (!_getParasitics (&net->tot_cap)) {
+	spef_warning (_l, "*D_NET cap error");
 	return false;
       }
 
@@ -723,108 +834,227 @@ bool Spef::_read_internal_def ()
 	   90 = final cell placement, final route, 2.5d extraction
 	   100 = final cell placement, final route, 3d extraction
        */
-      int routing_conf = -1;
+      net->routing_confidence = -1;
       if (lex_have (_l, _star_v)) {
-	if (lex_have (_l, l_integer)) {
-	  routing_conf = lex_integer (_l);
+	if (lex_sym (_l) == l_integer) {
+	  net->routing_confidence = lex_integer (_l);
+	  lex_getsym (_l);
 	}
 	else {
-	  warning ("SPEF parsing: *D_NET error\n%s", lex_errstring (_l));
+	  spef_warning (_l, "*D_NET routing confidence error");
 	  return false;
 	}
       }
+
+      A_INIT (net->u.d.conn);
+      A_INIT (net->u.d.caps);
+      A_INIT (net->u.d.res);
+      A_INIT (net->u.d.induc);
       
       if (lex_have (_l, _star_conn)) {
 	/* optional connection section */
 	/* *P or *I parts */
 	bool found = false;
+	
 	while (lex_sym (_l) == _star_p || lex_sym (_l) == _star_i) {
+	  spef_conn *conn;
+
+	  A_NEW (net->u.d.conn, spef_conn);
+	  conn = &A_NEXT (net->u.d.conn);
+	  A_INC (net->u.d.conn);
+	  conn->a = NULL;
+	  conn->conn = NULL;
+	  conn->pin = NULL;
+	  
 	  ActId *inst, *pin;
 	  int dir;
 	  found = true;
 	  if (lex_have (_l, _star_p)) {
 	    /* port name or pport name */
-	    if (!_getPortName (false, &inst, &pin) &&
+	    if (!(!phys && _getPortName (false, &inst, &pin)) &&
 		!_getPortName (true, &inst, &pin)) {
-	      warning ("SPEF parsing: *P missing port\n%s",
-		       lex_errstring (_l));
+	      spef_warning (_l, "*P missing port");
 	      return false;
 	    }
+	    conn->type = 0;
 	  }
 	  else if (lex_have (_l, _star_i)) {
 	    /* pin name or pnode ref */
 	    ActId *inst_name, *pin;
-	    if ((inst_name = _getIndex()) || (inst_name = _getTokPath())) {
+	    if ((inst_name = _getIndex()) ||
+		(!phys && (inst_name = _getTokPath()))) {
 	      /* pin delim */
 	      if (!lex_have (_l, _tok_pin_delim)) {
-		warning ("SPEF parsing: *I pin error\n%s",
-			 lex_errstring (_l));
+		spef_warning (_l, "*I pin error");
 		return false;
 	      }
 	      pin = _getIndex();
 	      if (!pin) {
-		pin = _getTokPath();
+		if (!phys) {
+		  pin = _getTokPath();
+		}
+		else {
+		  pin = _getTokPhysicalRef();
+		}
 		if (!pin) {
-		  warning ("SPEF parsing: *I pin error\n%s",
-			   lex_errstring (_l));
+		  spef_warning (_l, "*I pin error");
 		  return false;
 		}
-	      }
-	      if (MAP_GET_PTR(pin)->Rest()) {
-		warning ("SPEF parsing: *I pin error\n%s",
-			 lex_errstring (_l));
-		return false;
 	      }
 	    }
 	    else if ((inst = _getTokPhysicalRef ())) {
 	      if (!lex_have (_l, _tok_pin_delim)) {
-		warning ("SPEF parsing: *I pin error\n%s",
-			 lex_errstring (_l));
+		spef_warning (_l, "*I pin error");
 		return false;
 	      }
 	      pin = _getIndex();
 	      if (!pin) {
-		pin = _getTokName();
+		if (!phys) {
+		  pin = _getTokName();
+		}
+		else {
+		  pin = _getTokPhysicalRef ();
+		}
 		if (!pin) {
-		  warning ("SPEF parsing: *I pin error\n%s",
-			   lex_errstring (_l));
+		  spef_warning (_l, "*I pin error");
 		  return false;
 		}
 	      }
 	    }
 	    else {
-	      warning ("SPEF parsing: *I pin error\n%s", lex_errstring (_l));
+	      spef_warning (_l, "*I pin error");
 	      return false;
 	    }
+	    Assert (pin, "Hmm?");
+	    if (MAP_GET_PTR(pin)->Rest()) {
+	      spef_warning (_l, "pin error");
+	      return false;
+	    }
+	    conn->type = 1;
 	  }
 	  else {
 	    Assert (0, "What?!");
 	  }
+	  conn->conn = inst;
+	  conn->pin = pin;
 	  dir = lex_get_dir (_l);
 	  if (dir == -1) {
-	    warning ("SPEF parsing: *CONN direction error\n%s",
-		     lex_errstring (_l));
+	    spef_warning (_l, "*CONN direction error");
 	    return false;
 	  }
-	  spef_attributes *a = _getAttributes ();
+	  conn->dir = dir;
+	  conn->a  = _getAttributes ();
 	}
 	if (!found) {
-	  warning ("SPEF parsing: *CONN missing a conn_def\n%s",
-		   lex_errstring (_l));
+	  spef_warning (_l, "*CONN missing a conn_def");
 	  return false;
 	}
 	
+	/* *N stuff */
+	while (lex_have (_l, _star_n)) {
+	  spef_conn *conn;
 
-	/* *N parts */
-	
-	
+	  A_NEW (net->u.d.conn, spef_conn);
+	  conn = &A_NEXT (net->u.d.conn);
+	  A_INC (net->u.d.conn);
+	  conn->a = NULL;
+	  conn->conn = NULL;
+	  conn->pin = NULL;
+	  conn->type = 2;
+	  
+	  /* net-ref */
+	  ActId *tmp;
+	  if (!(tmp = _getIndex()) && !(tmp = _getTokPath())) {
+	    spef_warning (_l, "*N internal node error");
+	    return false;
+	  }
+	  conn->conn = tmp;
+	  if (!lex_have (_l, _tok_pin_delim)) {
+	    spef_warning (_l, "*N internal node error");
+	    return false;
+	  }
+	  if (!(lex_sym (_l) == l_integer)) {
+	    spef_warning (_l, "*N missing integer");
+	    return false;
+	  }
+	  conn->ipin = lex_integer (_l);
+	  lex_getsym (_l);
+	  if (!lex_have (_l, _star_c)) {
+	    spef_warning (_l, "*N missing *C");
+	    return false;
+	  }
+	  if (!lex_have_number (_l, &conn->cx)) {
+	    return false;
+	  }
+	  if (!lex_have_number (_l, &conn->cy)) {
+	    return false;
+	  }
+	}
       }
       if (lex_have (_l, _star_cap)) {
 	/* optional cap section */
+	while (lex_sym (_l) == l_integer) {
+	  spef_parasitic *sc;
+	  A_NEW (net->u.d.caps, spef_parasitic);
+	  sc = &A_NEXT (net->u.d.caps);
+	  A_INC (net->u.d.caps);
+	  sc->n.inst = NULL;
+	  sc->n.pin = NULL;
+	  sc->n2.inst = NULL;
+	  sc->n2.pin = NULL;
+
+	  sc->id = lex_integer (_l);
+	  lex_getsym (_l);
+
+	  if (!_getPinPortInternal (&sc->n)) {
+	    spef_warning (_l, "node error");
+	    return false;
+	  }
+
+	  if (lex_sym (_l) != l_integer) {
+	    /* bug in the standard */
+	    if (_getPinPortInternal (&sc->n2)) {
+	      /* okay, coupling cap */
+	    }
+	  }
+
+	  if (!_getParasitics (&sc->val)) {
+	    spef_warning (_l, "error in parasitics");
+	    return false;
+	  }
+	  SKIP_SC_OPTIONAL;
+	}
       }
-	
       if (lex_have (_l, _star_res)) {
 	/* optional res section */
+	while (lex_sym (_l) == l_integer) {
+	  spef_parasitic *sc;
+	  A_NEW (net->u.d.res, spef_parasitic);
+	  sc = &A_NEXT (net->u.d.res);
+	  A_INC (net->u.d.res);
+	  sc->n.inst = NULL;
+	  sc->n.pin = NULL;
+	  sc->n2.inst = NULL;
+	  sc->n2.pin = NULL;
+
+	  sc->id = lex_integer (_l);
+	  lex_getsym (_l);
+
+	  if (!_getPinPortInternal (&sc->n)) {
+	    spef_warning (_l, "*RES node error");
+	    return false;
+	  }
+
+	  if (!_getPinPortInternal (&sc->n2)) {
+	    spef_warning (_l, "*RES node error");
+	    return false;
+	  }
+	  if (!_getParasitics (&sc->val)) {
+	    spef_warning (_l, "error in parasitics");
+	    return false;
+	  }
+	  SKIP_SC_OPTIONAL;
+	}
       }
 
       if (lex_have (_l, _star_induc)) {
@@ -833,13 +1063,162 @@ bool Spef::_read_internal_def ()
       }
 
       if (!lex_have (_l, _star_end)) {
-	warning ("SPEF parsing: *D_NET missing *END\n%s", lex_errstring (_l));
+	spef_warning (_l, "*D_NET missing *END");
 	return false;
       }
       
     }
-    else if (lex_have (_l, _star_r_net)) {
+    else if (lex_have (_l, _star_r_net) || lex_have (_l, _star_r_pnet)) {
+      if (!((net->net = _getIndex()) || (!phys && (net->net = _getTokPath()))
+	    || (phys && (net->net = _getTokPhysicalRef())))) {
+	spef_warning (_l, "*R_NET error");
+	return false;
+      }
+      if (!_getParasitics (&net->tot_cap)) {
+	spef_warning (_l, "*R_NET error");
+	return false;
+      }
+      net->routing_confidence = -1;
+      if (lex_have (_l, _star_v)) {
+	if (lex_sym (_l) == l_integer) {
+	  net->routing_confidence = lex_integer (_l);
+	  lex_getsym (_l);
+	}
+	else {
+	  spef_warning (_l, "*R_NET routing confidence error");
+	  return false;
+	}
+      }
+      A_INIT (net->u.r.drivers);
+      while (lex_have (_l, _star_driver)) {
+	spef_reduced *rnet;
+	A_NEW (net->u.r.drivers, spef_reduced);
+	rnet = &A_NEXT (net->u.r.drivers);
+	A_INC (net->u.r.drivers);
+	rnet->driver_inst = NULL;
+	rnet->pin = NULL;
+	rnet->cell_type = NULL;
+	A_INIT (rnet->rc);
 
+	if (!((rnet->driver_inst = _getIndex()) ||
+	      (rnet->driver_inst = _getTokPath()))) {
+	  spef_warning (_l, "*R_NET driver pin error");
+	  return false;
+	}
+
+	if (_tok_pin_delim == -1 || !lex_have (_l, _tok_pin_delim)) {
+	  spef_warning (_l, "missing pin");
+	  return false;
+	}
+
+	if (!((rnet->pin = _getIndex()) || (rnet->pin = _getTokPath()))) {
+	  spef_warning (_l, "missing pin");
+	  return false;
+	}
+
+	if (!lex_have (_l, _star_cell)) {
+	  spef_warning (_l, "missing *CELL");
+	  return false;
+	}
+
+	if (!((rnet->cell_type = _getIndex()) ||
+	      (rnet->cell_type = _getTokPath()))) {
+	  spef_warning (_l, "*CELL error");
+	  return false;
+	}
+
+	if (!lex_have (_l, _star_c2_r1_c1)) {
+	  spef_warning (_l, "missing *C2_R1_C1");
+	  return false;
+	}
+
+	if (!_getParasitics (&rnet->c2)) {
+	  spef_warning (_l, "parasitics error");
+	  return false;
+	}
+	  
+	if (!_getParasitics (&rnet->r1)) {
+	  spef_warning (_l, "parasitics error");
+	  return false;
+	}
+	  
+	if (!_getParasitics (&rnet->c1)) {
+	  spef_warning (_l, "parasitics error");
+	  return false;
+	}
+
+	/* loads */
+	if (!lex_have (_l, _star_loads)) {
+	  spef_warning (_l, "missing *LOADS");
+	  return false;
+	}
+
+	while (lex_have (_l, _star_rc)) {
+	  spef_rc_desc *rc;
+	  A_NEW (rnet->rc, spef_rc_desc);
+	  rc = &A_NEXT (rnet->rc);
+	  A_INIT (rnet->rc);
+	  rc->inst = NULL;
+	  rc->pin = NULL;
+
+	  if (!((rc->inst = _getIndex()) || (rc->inst = _getTokPath()))) {
+	    spef_warning (_l, "missing pin name for *RC");
+	    return false;
+	  }
+	  if (_tok_pin_delim == -1 || !lex_have (_l, _tok_pin_delim)) {
+	    spef_warning (_l, "missing pin");
+	    return false;
+	  }
+	  if (!((rc->pin = _getIndex()) || (rc->pin = _getTokPath()))) {
+	    spef_warning (_l, "missing pin name for *RC");
+	    return false;
+	  }
+
+	  if (!_getParasitics (&rc->val)) {
+	    spef_warning (_l, "missing parastics");
+	    return false;
+	  }
+
+	  if (lex_have (_l, _star_q)) {
+	    if (lex_sym (_l) != l_integer) {
+	      spef_warning (_l, "missing index");
+	      return false;
+	    }
+	    rc->pole.idx = lex_integer (_l);
+	    lex_getsym (_l);
+
+	    if (!_getComplexParasitics (&rc->pole.re, &rc->pole.im)) {
+	      spef_warning (_l, "parasitics error");
+	      return false;
+	    }
+
+	    if (!lex_have (_l, _star_k)) {
+	      spef_warning (_l, "missing residue");
+	      return false;
+	    }
+	    if (lex_sym (_l) != l_integer) {
+	      spef_warning (_l, "missing index");
+	      return false;
+	    }
+	    rc->residue.idx = lex_integer (_l);
+	    lex_getsym (_l);
+	    
+	    if (!_getComplexParasitics (&rc->residue.re, &rc->residue.im)) {
+	      spef_warning (_l, "parasitics error");
+	      return false;
+	    }
+	  }
+	  else {
+	    rc->pole.idx = -1;
+	    rc->residue.idx = -1;
+	  }
+	}
+      }
+
+      if (!lex_have (_l, _star_end)) {
+	spef_warning (_l, "*R_NET missing *END");
+	return false;
+      }
     }
   }
   return found;
@@ -1012,13 +1391,14 @@ ActId *Spef::_getTokPath ()
   } while (lex_have (_l, _tok_hier_delim));
 
   if (lex_have (_l, _tok_prefix_bus_delim)) {
-    if (!lex_have (_l, l_integer)) {
+    if (!(lex_sym (_l) == l_integer)) {
       delete ret;
       lex_set_position (_l);
       lex_pop_position (_l);
       return NULL;
     }
     Array *a = new Array (lex_integer (_l));
+    lex_getsym (_l);
     tmp->setArray (a);
     if (_tok_suffix_bus_delim != -1 && lex_have (_l, _tok_suffix_bus_delim)) {
       /* nothing */
@@ -1041,6 +1421,7 @@ ActId *Spef::_getIndex()
     lex_getsym (_l);
     if (strcmp (lex_whitespace (_l), "") == 0 &&
 	lex_sym (_l) == l_integer) {
+      int ival = lex_integer (_l);
       ihash_bucket_t *b;
       lex_getsym (_l);
       if (!_nH) {
@@ -1048,7 +1429,7 @@ ActId *Spef::_getIndex()
 	lex_pop_position (_l);
 	return NULL;
       }
-      b = ihash_lookup (_nH, lex_integer (_l));
+      b = ihash_lookup (_nH, ival);
       if (!b) {
 	lex_set_position (_l);
 	lex_pop_position (_l);
@@ -1068,19 +1449,6 @@ ActId *Spef::_getIndex()
   }
 }
 
-static int lex_have_number (LEX_T *l, float *d)
-{
-  if (lex_have (l, l_integer)) {
-    *d = lex_integer (l);
-    return 1;
-  }
-  else if (lex_have (l, l_real)) {
-    *d = lex_real (l);
-    return 1;
-  }
-  return 0;
-}
-
 bool Spef::_getParasitics (spef_triplet *t)
 {
   lex_push_position (_l);
@@ -1090,6 +1458,7 @@ bool Spef::_getParasitics (spef_triplet *t)
     lex_pop_position (_l);
     return false;
   }
+
   if (!lex_have (_l, _tok_colon)) {
     t->best = t->typ;
     t->worst = t->typ;
@@ -1116,6 +1485,78 @@ bool Spef::_getParasitics (spef_triplet *t)
   return true;
 }
 
+bool Spef::_getComplexParasitics (spef_triplet *re, spef_triplet *im)
+{
+  lex_push_position (_l);
+
+  if (!lex_have_number (_l, &re->typ)) {
+    lex_set_position (_l);
+    lex_pop_position (_l);
+    return false;
+  }
+
+  if (lex_have (_l, _tok_colon)) {
+    lex_set_position (_l);
+    lex_pop_position (_l);
+    im->best = 0;
+    im->typ = 0;
+    im->worst = 0;
+    return _getParasitics (re);
+  }
+
+  if (!lex_have_number (_l, &im->typ)) {
+    re->best = re->typ;
+    re->worst = re->typ;
+    im->best = 0;
+    im->worst = 0;
+    im->typ = 0;
+    lex_pop_position (_l);
+    return true;
+  }
+
+  if (!lex_have (_l, _tok_colon)) {
+    re->best = re->typ;
+    re->worst = re->typ;
+    im->best = im->typ;
+    im->worst = im->typ;
+    lex_pop_position (_l);
+    return true;
+  }
+  re->best = re->typ;
+  im->best = im->typ;
+
+  if (!lex_have_number (_l, &re->typ)) {
+    lex_set_position (_l);
+    lex_pop_position (_l);
+    return false;
+  }
+  if (!lex_have_number (_l, &im->typ)) {
+    lex_set_position (_l);
+    lex_pop_position (_l);
+    return false;
+  }
+  
+  if (!lex_have (_l, _tok_colon)) {
+    lex_set_position (_l);
+    lex_pop_position (_l);
+    return false;
+  }
+  
+  if (!lex_have_number (_l, &re->worst)) {
+    lex_set_position (_l);
+    lex_pop_position (_l);
+    return false;
+  }
+  if (!lex_have_number (_l, &im->worst)) {
+    lex_set_position (_l);
+    lex_pop_position (_l);
+    return false;
+  }
+
+  lex_pop_position (_l);
+  return true;
+}
+
 spef_attributes *Spef::_getAttributes()
 {
   spef_attributes *ret = NULL;
@@ -1133,66 +1574,54 @@ spef_attributes *Spef::_getAttributes()
     }
     if (lex_have (_l, _star_l)) {
       if (ret->load) {
-	warning ("SPEF parser: duplicate *L\n%s", lex_errstring (_l));
+	spef_warning (_l, "duplicate *L");
       }
       ret->load = 1;
 
       if (!_getParasitics (&ret->l)) {
-	warning ("SPEF parser: parasitics error\n%s", lex_errstring (_l));
+	spef_warning (_l, "parasitics error");
 	FREE (ret);
 	return NULL;
       }
     }
     else if (lex_have (_l, _star_c)) {
       if (ret->coord) {
-	warning ("SPEF parser: duplicate *C\n%s", lex_errstring (_l));
+	spef_warning (_l, "duplicate *C");
       }
       ret->coord = 1;
-      if (lex_have (_l, l_integer)) {
-	ret->cx = lex_integer (_l);
-      }
-      else if (lex_have (_l, l_real)) {
-	ret->cx = lex_real (_l);
-      }
-      else {
-	warning ("SPEF parser: parasitics error\n%s", lex_errstring (_l));
+      if (!lex_have_number (_l, &ret->cx)) {
+	spef_warning (_l, "parasitics error");
 	FREE (ret);
 	return NULL;
       }
-      if (lex_have (_l, l_integer)) {
-	ret->cy = lex_integer (_l);
-      }
-      else if (lex_have (_l, l_real)) {
-	ret->cy = lex_real (_l);
-      }
-      else {
-	warning ("SPEF parser: parasitics error\n%s", lex_errstring (_l));
+      if (!lex_have_number (_l, &ret->cy)) {
+	spef_warning (_l, "parasitics error");
 	FREE (ret);
 	return NULL;
       }
     }
     else if (lex_have (_l, _star_s)) {
       if (ret->slew) {
-	warning ("SPEF parser: duplicate *S\n%s", lex_errstring (_l));
+	spef_warning (_l, "duplicate *S");
       }
       ret->slew = 1;
       if (_getParasitics (&ret->s1) && _getParasitics (&ret->s2)) {
 	if (_getParasitics (&ret->t1)) {
 	  ret->slewth = 1;
 	  if (!_getParasitics (&ret->t2)) {
-	    warning ("SPEF parser: parasitics error\n%s", lex_errstring (_l));
+	    spef_warning (_l, "parasitics error");
 	  }
 	}
       }
       else {
-	warning ("SPEF parser: parasitics error\n%s", lex_errstring (_l));
+	spef_warning (_l, "parasitics error");
 	FREE (ret);
 	return NULL;
       }
     }
     else if (lex_have (_l, _star_d)) {
       if (ret->drive) {
-	warning ("SPEF parser: duplicate *D");
+	spef_warning (_l, "duplicate *D");
       }
       ActId *tmp;
       tmp = _getIndex ();
@@ -1200,7 +1629,7 @@ spef_attributes *Spef::_getAttributes()
 	tmp = _getTokPath ();
       }
       if (!tmp) {
-	warning ("SPEF parser: parasitics error\n%s", lex_errstring (_l));
+	spef_warning (_l, "parasitics error");
 	FREE (ret);
 	return NULL;
       }

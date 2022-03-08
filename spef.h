@@ -50,8 +50,8 @@ struct spef_attributes {
 
 struct spef_ports {
   ActId *inst, *port;
-  int dir;			// 0 = in, 1 = out, 2 = bidir
   spef_attributes *a;
+  unsigned int dir;		// 0 = in, 1 = out, 2 = bidir
 };
 
 struct spef_defines {
@@ -60,24 +60,68 @@ struct spef_defines {
   char *qstring;
 };
 
+struct spef_conn {
+  unsigned int type:2;		// 0 = *P, 1 = *I, 2 = *N
+  unsigned int dir:2;		// 0 = in, 1 = out, 2 = bidir
+  ActId *conn;
+  ActId *pin;
+  spef_attributes *a;
+  int ipin;
+  float cx, cy;			// coordinates
+};
+
+struct spef_node {
+  ActId *inst;			// inst : pin
+  ActId *pin;			// or pin 
+  int idx;			// w/ optional integer for internal nodes
+};
+
+struct spef_parasitic {
+  int id;			// id
+  spef_node n, n2;
+  spef_triplet val;
+  /* XXX: sensitivity: use with variations */
+};
+
 struct spef_detailed_net {
-  /* connections */
-  /* caps */
-  /* resistances */
-  /* inductances */
-  int x;
+  A_DECL (spef_conn, conn);
+  A_DECL (spef_parasitic, caps);
+  A_DECL (spef_parasitic, res);
+  A_DECL (spef_parasitic, induc);
+};
+
+struct spef_rc_desc {
+  ActId *inst, *pin;
+  spef_triplet val;
+
+  struct pole_desc {
+    int idx;  // -1 means not set
+    spef_triplet re;
+    spef_triplet im;
+  } pole, residue;
+};
+
+struct spef_reduced {
+  ActId *driver_inst, *pin;
+  ActId *cell_type;
+  spef_triplet c2, r1, c1;	// pi model
+  A_DECL (spef_rc_desc, rc);
 };
 
 struct spef_reduced_net {
   /* list of driver, cell, pi model, load description */
-  int x;
+  A_DECL (spef_reduced, drivers);
 };
+
+  
 
 struct spef_net {
   ActId *net;			// net name
   spef_triplet tot_cap;		// total cap
   int routing_confidence;	// confidence
-  int type;			// 0 = D_NET, 1 = R_NET
+  int type;			// 0 = D_NET, 1 = R_NET, 2 = D_PNET,
+				// 3 = D_RNET
+  
   union {
     spef_detailed_net d;
     spef_reduced_net r;
@@ -119,7 +163,11 @@ class Spef {
   // returns inst name and port name
   bool _getPortName (bool isphy, ActId **inst_name, ActId **port);
 
+
+  bool _getPinPortInternal (spef_node *n);
+
   bool _getParasitics (spef_triplet *t);
+  bool _getComplexParasitics (spef_triplet *re, spef_triplet *im);
   spef_attributes *_getAttributes();
 
   /* read each section */
@@ -154,6 +202,7 @@ class Spef {
   A_DECL (spef_ports, _phyports);
 
   A_DECL (spef_defines, _defines);
+  A_DECL (spef_net, _nets);
 };
 
 

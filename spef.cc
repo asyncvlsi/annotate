@@ -28,6 +28,7 @@
 #define MAP_MK_ABS(x) ((ActId *) (((unsigned long)(x))|1))
 #define MAP_MK_REF(x) ((ActId *) (((unsigned long)(x))|2))
 #define MAP_IS_REF(x) (((unsigned long)x) & 2)
+#define MAP_IS_ABS(x) (((unsigned long)x) & 1)
 
 static void spef_warning (LEX_T *l, const char *s)
 {
@@ -89,6 +90,7 @@ Spef::Spef()
 #define TOKEN(a,b)  a = -1;  
 #include "spef.def"
 
+  _valid = 0;
   _spef_version = NULL;
   _design_name = NULL;
   _date = NULL;
@@ -101,6 +103,11 @@ Spef::Spef()
   _tok_prefix_bus_delim = -1;
   _tok_suffix_bus_delim = -1;
   _nH = NULL;
+
+  _divider = '?';
+  _delimiter = '?';
+  _bus_suffix_delim = '?';
+  _bus_prefix_delim = '?';
 
   A_INIT (_power_nets);
   A_INIT (_gnd_nets);
@@ -241,6 +248,7 @@ bool Spef::Read (FILE *fp)
   }
   lex_free (_l);
   _l = NULL;
+  _valid = 1;
   return true;
 }
 
@@ -295,6 +303,7 @@ bool Spef::_read_header ()
       strcmp (lex_tokenstring (_l), ":") == 0 ||
       strcmp (lex_tokenstring (_l), "|") == 0) {
     _tok_hier_delim = lex_addtoken (_l, lex_tokenstring (_l));
+    _divider = lex_tokenstring(_l)[0];
   }
   else {
     spef_warning (_l, "*DIVIDER must be one of . / : |");
@@ -313,6 +322,7 @@ bool Spef::_read_header ()
       strcmp (lex_tokenstring (_l), ":") == 0 ||
       strcmp (lex_tokenstring (_l), "|") == 0) {
     _tok_pin_delim = lex_addtoken (_l, lex_tokenstring (_l));
+    _delimiter = lex_tokenstring(_l)[0];
   }
   else {
     spef_warning (_l, "*DELIMITER must be one of . / : |");
@@ -332,6 +342,7 @@ bool Spef::_read_header ()
       strcmp (lex_tokenstring (_l), ":") == 0 ||
       strcmp (lex_tokenstring (_l), ".") == 0) {
     _tok_prefix_bus_delim = lex_addtoken (_l, lex_tokenstring (_l));
+    _bus_prefix_delim = lex_tokenstring(_l)[0];
   }
   else {
     spef_warning (_l, "*BUS_DELIMITER must be one of [ { ( < : .");
@@ -343,6 +354,7 @@ bool Spef::_read_header ()
       strcmp (lex_tokenstring (_l), ")") == 0 ||
       strcmp (lex_tokenstring (_l), ">") == 0) {
     _tok_suffix_bus_delim = lex_addtoken (_l, lex_tokenstring (_l));
+    _bus_suffix_delim = lex_tokenstring(_l)[0];
     lex_getsym (_l);
   }
   return true;
@@ -1641,4 +1653,199 @@ spef_attributes *Spef::_getAttributes()
     }
   }
   return ret;
+}
+
+static void _print_triplet (FILE *fp, spef_triplet *t)
+{
+  if (t->best == t->worst && t->best == t->typ) {
+    fprintf (fp, "%g", t->typ);
+  }
+  else {
+    fprintf (fp, "%g:%g:%g", t->best, t->typ, t->worst);
+  }
+}
+
+static void _print_attributes (FILE *fp, spef_attributes *a)
+{
+  if (a->coord) {
+    fprintf (fp, " *C %g %g", a->cx, a->cy);
+  }
+  if (a->load) {
+    fprintf (fp, " *L ");
+    _print_triplet (fp, &a->l);
+  }
+  if (a->slew) {
+    fprintf (fp, " *S ");
+    _print_triplet (fp, &a->s1);
+    fprintf (fp, " ");
+    _print_triplet (fp, &a->s2);
+    if (a->slewth) {
+      fprintf (fp, " ");
+      _print_triplet (fp, &a->t2);
+    }
+  }
+  if (a->drive) {
+    fprintf (fp, " *D ");
+    if (a->cell) {
+      a->cell->Print (fp);
+    }
+  }
+}
+
+static void _print_spef_port (FILE *fp, spef_ports *p, char _delimiter)
+{
+  if (p->inst && p->port) {
+    p->inst->Print (fp);
+    fprintf (fp, "%c", _delimiter);
+    p->port->Print (fp);
+  }
+  else {
+    Assert (p->port && !p->inst, "What?");
+    p->port->Print (fp);
+  }
+  if (p->dir == 0) {
+    fprintf (fp, " I");
+  }
+  else if (p->dir == 1) {
+    fprintf (fp, " O");
+  }
+  else {
+    fprintf (fp, " B");
+  }
+  if (p->a) {
+    _print_attributes (fp, p->a);
+  }
+}
+
+void Spef::Print (FILE *fp)
+{
+  auto lambda = [fp] (const char *s, const char *v)
+    {
+      if (v) {
+	fprintf (fp, "%s \"%s\"\n", s, v);
+      }
+    };
+
+  if (!_valid) {
+    fprintf (fp, "/* WARNING: invalid spef! */\n");
+  }
+
+  lambda("*SPEF", _spef_version);
+  lambda("*DESIGN", _design_name);
+  lambda("*DATE", _date);
+  lambda("*VENDOR", _vendor);
+  lambda("*PROGRAM", _program);
+  lambda("*VERSION", _version);
+
+  lambda ("*DESIGN_FLOW", "-not-recorded-");
+
+  fprintf (fp, "*DIVIDER %c\n", _divider);
+  fprintf (fp, "*DELIMITER %c\n", _delimiter);
+  fprintf (fp, "*BUS_DELIMITER %c", _bus_prefix_delim);
+  if (_tok_suffix_bus_delim != -1) {
+    fprintf (fp, " %c", _bus_suffix_delim);
+  }
+  fprintf (fp, "\n");
+  
+  if (_time_unit >= 1e-9) {
+    fprintf (fp, "*T_UNIT %g NS\n", _time_unit*1e9);
+  }
+  else {
+    fprintf (fp, "*T_UNIT %g PS\n", _time_unit*1e12);
+  }
+
+  if (_c_unit >= 1e-12) {
+    fprintf (fp, "*C_UNIT %g PF\n", _c_unit*1e12);
+  }
+  else {
+    fprintf (fp, "*C_UNIT %g FF\n", _c_unit*1e15);
+  }
+
+  if (_r_unit >= 1e3) {
+    fprintf (fp, "*R_UNIT %g KOHM\n", _r_unit*1e-3);
+  }
+  else {
+    fprintf (fp, "*R_UNIT %g OHM\n", _r_unit);
+  }
+
+  if (_l_unit >= 1) {
+    fprintf (fp, "*L_UNIT %g HENRY\n", _l_unit);
+  }
+  else if (_l_unit >= 1e-3) {
+    fprintf (fp, "*L_UNIT %g MH\n", _l_unit*1e3);
+  }
+  else {
+    fprintf (fp, "*L_UNIT %g UH\n", _l_unit*1e6);
+  }
+
+  /* name map */
+  if (_nH) {
+    ihash_iter_t it;
+    ihash_bucket_t *b;
+    fprintf (fp, "*NAME_MAP\n");
+    ihash_iter_init (_nH, &it);
+    while ((b = ihash_iter_next (_nH, &it))) {
+      ActId *id;
+      fprintf (fp, "*%lu ", b->key);
+      id = MAP_GET_PTR (b->v);
+      if (MAP_IS_ABS (b->v)) {
+	fprintf (fp, "%c", _divider);
+      }
+      id->Print (fp);
+      fprintf (fp, "\n");
+    }
+  }
+
+  /* power def */
+  if (A_LEN (_power_nets) > 0) {
+    fprintf (fp, "*POWER_NETS");
+    for (int i=0; i < A_LEN (_power_nets); i++) {
+      fprintf (fp, " ");
+      _power_nets[i]->Print (fp);
+    }
+    fprintf (fp, "\n");
+  }
+
+  if (A_LEN (_gnd_nets) > 0) {
+    fprintf (fp, "*GND_NETS");
+    for (int i=0; i < A_LEN (_gnd_nets); i++) {
+      fprintf (fp, " ");
+      _power_nets[i]->Print (fp);
+    }
+    fprintf (fp, "\n");
+  }
+
+  if (A_LEN (_ports) > 0) {
+    fprintf (fp, "*PORTS\n");
+    for (int i=0; i < A_LEN (_ports); i++) {
+      _print_spef_port (fp, &_ports[i], _delimiter);
+      fprintf (fp, "\n");
+    }
+  }
+  if (A_LEN (_phyports) > 0) {
+    fprintf (fp, "*PPORTS\n");
+    for (int i=0; i < A_LEN (_phyports); i++) {
+      _print_spef_port (fp, &_phyports[i], _delimiter);
+      fprintf (fp, "\n");
+    }
+  }
+
+  if (A_LEN (_defines) > 0) {
+    for (int i=0; i < A_LEN (_defines); i++) {
+      if (_defines[i].phys) {
+	fprintf (fp, "*PDEFINE");
+      }
+      else {
+	fprintf (fp, "*DEFINE");
+      }
+      if (_defines[i].inst) {
+	fprintf (fp, " ");
+	_defines[i].inst->Print (fp);
+      }
+      if (_defines[i].qstring) {
+	fprintf (fp, " \"%s\"", _defines[i].qstring);
+      }
+      fprintf (fp, "\n");
+    }
+  }
 }

@@ -8,6 +8,9 @@ int main (void)
   if (!s->Read (stdin)) {
     printf ("Read error!\n");
   }
+
+  s->Print (stdout);
+
   delete s;
   return 0;
 }

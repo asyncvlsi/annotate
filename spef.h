@@ -135,6 +135,10 @@ class Spef {
 
   /* returns true on success, false on error */
   bool Read (FILE *fp);
+
+
+  /* print */
+  void Print (FILE *fp);
   
  private:
   LEX_T *_l;
@@ -192,8 +196,13 @@ class Spef {
   double _r_unit;
   double _l_unit;
 
+  char _divider, _delimiter;
+  char _bus_prefix_delim, _bus_suffix_delim;
+
   /* name map */
   struct iHashtable *_nH;
+
+  unsigned int _valid:1;	// valid spef!
 
   A_DECL (ActId *, _power_nets);
   A_DECL (ActId *, _gnd_nets);

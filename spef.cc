@@ -84,7 +84,7 @@ static int lex_have_number (LEX_T *l, double *d)
    } while (0)
 
 
-Spef::Spef()
+Spef::Spef(bool mangled_ids)
 {
   _l = NULL;
 #define TOKEN(a,b)  a = -1;  
@@ -114,6 +114,13 @@ Spef::Spef()
   A_INIT (_ports);
   A_INIT (_phyports);
   A_INIT (_defines);
+
+  if (mangled_ids) {
+    _a = new Act();
+  }
+  else {
+    _a = NULL;
+  }
 }
 
 static void _free_id (ActId *id)
@@ -183,6 +190,8 @@ Spef::~Spef()
     }
     _free_id (_ports[i].port);
   }
+  A_FREE (_ports);
+  
   for (int i=0; i < A_LEN (_phyports); i++) {
     if (_phyports[i].a) {
       FREE (_phyports[i].a);
@@ -1381,39 +1390,60 @@ ActId *Spef::_getTokPath ()
     isabs = 0;
   }
 
-  do {
-    char *part = _getTokId ();
-    if (!part) {
+  if (_a) {
+    char *tmpbuf;
+    if (lex_sym (_l) != l_id) {
       lex_set_position (_l);
       lex_pop_position (_l);
-      if (ret) {
-	delete ret;
-      }
       return NULL;
     }
+    MALLOC (tmpbuf, char, strlen (lex_tokenstring (_l))+ 1);
+    _a->unmangle_string (lex_tokenstring (_l), tmpbuf,
+			 strlen (lex_tokenstring (_l)) + 1);
+    ret = ActId::parseId (tmpbuf, '.', '[', ']', '.');
+    FREE (tmpbuf);
     if (!ret) {
-      ret = new ActId (part);
-      tmp = ret;
-    }
-    else {
-      tmp->Append (new ActId (part));
-      tmp = tmp->Rest();
-    }
-    FREE (part);
-  } while (lex_have (_l, _tok_hier_delim));
-
-  if (lex_have (_l, _tok_prefix_bus_delim)) {
-    if (!(lex_sym (_l) == l_integer)) {
-      delete ret;
       lex_set_position (_l);
       lex_pop_position (_l);
       return NULL;
     }
-    Array *a = new Array (lex_integer (_l));
-    lex_getsym (_l);
-    tmp->setArray (a);
-    if (_tok_suffix_bus_delim != -1 && lex_have (_l, _tok_suffix_bus_delim)) {
-      /* nothing */
+  }
+  else {
+    /* normal SPEF */
+    do {
+      char *part = _getTokId ();
+      if (!part) {
+	lex_set_position (_l);
+	lex_pop_position (_l);
+	if (ret) {
+	  delete ret;
+	}
+	return NULL;
+      }
+      if (!ret) {
+	ret = new ActId (part);
+	tmp = ret;
+      }
+      else {
+	tmp->Append (new ActId (part));
+	tmp = tmp->Rest();
+      }
+      FREE (part);
+    } while (lex_have (_l, _tok_hier_delim));
+
+    if (lex_have (_l, _tok_prefix_bus_delim)) {
+      if (!(lex_sym (_l) == l_integer)) {
+	delete ret;
+	lex_set_position (_l);
+	lex_pop_position (_l);
+	return NULL;
+      }
+      Array *a = new Array (lex_integer (_l));
+      lex_getsym (_l);
+      tmp->setArray (a);
+      if (_tok_suffix_bus_delim != -1 && lex_have (_l, _tok_suffix_bus_delim)) {
+	/* nothing */
+      }
     }
   }
   lex_pop_position (_l);
@@ -1687,7 +1717,7 @@ static void _print_attributes (FILE *fp, spef_attributes *a)
   if (a->drive) {
     fprintf (fp, " *D ");
     if (a->cell) {
-      a->cell->Print (fp);
+      MAP_GET_PTR(a->cell)->Print (fp);
     }
   }
 }
@@ -1695,13 +1725,13 @@ static void _print_attributes (FILE *fp, spef_attributes *a)
 static void _print_spef_port (FILE *fp, spef_ports *p, char _delimiter)
 {
   if (p->inst && p->port) {
-    p->inst->Print (fp);
+    MAP_GET_PTR (p->inst)->Print (fp);
     fprintf (fp, "%c", _delimiter);
-    p->port->Print (fp);
+    MAP_GET_PTR(p->port)->Print (fp);
   }
   else {
     Assert (p->port && !p->inst, "What?");
-    p->port->Print (fp);
+    MAP_GET_PTR(p->port)->Print (fp);
   }
   if (p->dir == 0) {
     fprintf (fp, " I");
@@ -1801,7 +1831,7 @@ void Spef::Print (FILE *fp)
     fprintf (fp, "*POWER_NETS");
     for (int i=0; i < A_LEN (_power_nets); i++) {
       fprintf (fp, " ");
-      _power_nets[i]->Print (fp);
+      MAP_GET_PTR(_power_nets[i])->Print (fp);
     }
     fprintf (fp, "\n");
   }
@@ -1810,7 +1840,7 @@ void Spef::Print (FILE *fp)
     fprintf (fp, "*GND_NETS");
     for (int i=0; i < A_LEN (_gnd_nets); i++) {
       fprintf (fp, " ");
-      _power_nets[i]->Print (fp);
+      MAP_GET_PTR(_gnd_nets[i])->Print (fp);
     }
     fprintf (fp, "\n");
   }
@@ -1840,7 +1870,7 @@ void Spef::Print (FILE *fp)
       }
       if (_defines[i].inst) {
 	fprintf (fp, " ");
-	_defines[i].inst->Print (fp);
+	MAP_GET_PTR(_defines[i].inst)->Print (fp);
       }
       if (_defines[i].qstring) {
 	fprintf (fp, " \"%s\"", _defines[i].qstring);

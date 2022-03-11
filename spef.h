@@ -130,7 +130,7 @@ struct spef_net {
 
 class Spef {
  public:
-  Spef();
+  Spef(bool mangled_ids = false);
   ~Spef();
 
   /* returns true on success, false on error */
@@ -183,6 +183,8 @@ class Spef {
   bool _read_define_def ();
   bool _read_variation_def ();
   bool _read_internal_def ();
+
+  Act *_a;
 
   /* data from the SPEF */
   char *_spef_version;

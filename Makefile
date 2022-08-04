@@ -19,15 +19,27 @@
 #
 #-------------------------------------------------------------------------
 EXE=test_spef.$(EXT)
+LIB=libactspef_$(EXT).a
 TARGETS=$(EXE)
+TARGETLIBS=$(LIB)
+TARGETINCS=spef.h spef.def
+TARGETINCSUBDIR=act
 
-OBJS=main.o spef.o
+LIBOBJ=spef.o
+
+MAIN=main.o
+
+OBJS=$(MAIN) $(LIBOBJ)
 
 SRCS=$(OBJS:.o=.cc)
 
 include $(ACT_HOME)/scripts/Makefile.std
 
-$(EXE): $(OBJS) $(LIBACTDEPEND)
-	$(CXX) $(CFLAGS) $(OBJS) -o $(EXE) $(LIBACT)
+$(EXE): $(MAIN) $(LIB) $(LIBACTDEPEND)
+	$(CXX) $(CFLAGS) $(MAIN) -o $(EXE) $(LIBACT) -lactspef
+
+$(LIB): $(OBJS)
+	ar ruv $(LIB) spef.o
+	$(RANLIB) $(LIB)
 
 -include Makefile.deps

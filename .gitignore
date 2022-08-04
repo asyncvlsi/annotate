@@ -4,3 +4,8 @@ x86_64*
 Makefile.deps
 test_spef.*
 libactspef*
+spef_pass_*.so
+Doxyfile
+html
+latex
+*~

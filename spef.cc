@@ -24,11 +24,11 @@
 #include <common/misc.h>
 #include "spef.h"
 
-#define MAP_GET_PTR(x)  ((ActId *)(((unsigned long)(x))&~3UL))
+#define MAP_GET_PTR(x) SPEF_GET_PTR(x)
 #define MAP_MK_ABS(x) ((ActId *) (((unsigned long)(x))|1))
 #define MAP_MK_REF(x) ((ActId *) (((unsigned long)(x))|2))
 #define MAP_IS_REF(x) (((unsigned long)x) & 2)
-#define MAP_IS_ABS(x) (((unsigned long)x) & 1)
+#define MAP_IS_ABS(x) SPEF_IS_ABS(x)
 
 static void spef_warning (LEX_T *l, const char *s)
 {
@@ -116,7 +116,10 @@ Spef::Spef(bool mangled_ids)
   A_INIT (_defines);
 
   if (mangled_ids) {
-    _a = new Act();
+    _a = ActNamespace::Act();
+    if (!_a) {
+      _a = new Act();
+    }
   }
   else {
     _a = NULL;
@@ -203,8 +206,8 @@ Spef::~Spef()
 
   for (int i=0; i < A_LEN (_defines); i++) {
     _free_id (_defines[i].inst);
-    if (_defines[i].qstring) {
-      FREE (_defines[i].qstring);
+    if (_defines[i].design_name) {
+      FREE (_defines[i].design_name);
     }
   }
   A_FREE (_defines);
@@ -734,7 +737,7 @@ bool Spef::_read_define_def ()
 	A_NEW (_defines, spef_defines);
 	A_NEXT (_defines).phys = 0;
 	A_NEXT (_defines).inst = tmp;
-	A_NEXT (_defines).qstring = NULL;
+	A_NEXT (_defines).design_name = NULL;
 	A_INC (_defines);
       }
       if (idx == A_LEN (_defines)) {
@@ -751,11 +754,11 @@ bool Spef::_read_define_def ()
       }
       while (idx < A_LEN (_defines)) {
 	if (str) {
-	  _defines[idx].qstring = str;
+	  _defines[idx].design_name = str;
 	  str = NULL;
 	}
 	else {
-	  _defines[idx].qstring = Strdup (_defines[idx-1].qstring);
+	  _defines[idx].design_name = Strdup (_defines[idx-1].design_name);
 	}
 	idx++;
       }
@@ -766,14 +769,15 @@ bool Spef::_read_define_def ()
 	A_NEW (_defines, spef_defines);
 	A_NEXT (_defines).phys = 1;
 	A_NEXT (_defines).inst = tmp;
-	A_NEXT (_defines).qstring = NULL;
+	A_NEXT (_defines).design_name = NULL;
+	A_NEXT (_defines).spef = NULL;
       }
       else {
 	spef_warning (_l, "*PDEFINE error");
 	return false;
       }
       if (lex_have (_l, l_string)) {
-	A_NEXT (_defines).qstring = _prevString();
+	A_NEXT (_defines).design_name = _prevString();
 	A_INC (_defines);
       }
       else {
@@ -884,7 +888,7 @@ bool Spef::_read_internal_def ()
 	  conn = &A_NEXT (net->u.d.conn);
 	  A_INC (net->u.d.conn);
 	  conn->a = NULL;
-	  conn->conn = NULL;
+	  conn->inst = NULL;
 	  conn->pin = NULL;
 	  
 	  ActId *inst, *pin;
@@ -956,7 +960,7 @@ bool Spef::_read_internal_def ()
 	  else {
 	    Assert (0, "What?!");
 	  }
-	  conn->conn = inst;
+	  conn->inst = inst;
 	  conn->pin = pin;
 	  dir = lex_get_dir (_l);
 	  if (dir == -1) {
@@ -979,7 +983,7 @@ bool Spef::_read_internal_def ()
 	  conn = &A_NEXT (net->u.d.conn);
 	  A_INC (net->u.d.conn);
 	  conn->a = NULL;
-	  conn->conn = NULL;
+	  conn->inst = NULL;
 	  conn->pin = NULL;
 	  conn->type = 2;
 	  
@@ -989,7 +993,7 @@ bool Spef::_read_internal_def ()
 	    spef_warning (_l, "*N internal node error");
 	    return false;
 	  }
-	  conn->conn = tmp;
+	  conn->inst = tmp;
 	  if (!lex_have (_l, _tok_pin_delim)) {
 	    spef_warning (_l, "*N internal node error");
 	    return false;
@@ -1872,8 +1876,8 @@ void Spef::Print (FILE *fp)
 	fprintf (fp, " ");
 	MAP_GET_PTR(_defines[i].inst)->Print (fp);
       }
-      if (_defines[i].qstring) {
-	fprintf (fp, " \"%s\"", _defines[i].qstring);
+      if (_defines[i].design_name) {
+	fprintf (fp, " \"%s\"", _defines[i].design_name);
       }
       fprintf (fp, "\n");
     }

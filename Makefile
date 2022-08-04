@@ -19,7 +19,9 @@
 #
 #-------------------------------------------------------------------------
 EXE=test_spef.$(EXT)
-LIB=libactspef_$(EXT).a
+LIB1=libactspef_$(EXT).a
+LIB2=spef_pass_$(EXT).so
+LIB=$(LIB1) $(LIB2)
 TARGETS=$(EXE)
 TARGETLIBS=$(LIB)
 TARGETINCS=spef.h spef.def
@@ -30,16 +32,25 @@ LIBOBJ=spef.o
 MAIN=main.o
 
 OBJS=$(MAIN) $(LIBOBJ)
+SHOBJS=spef_pass.os spef.os
 
-SRCS=$(OBJS:.o=.cc)
+SRCS=$(OBJS:.o=.cc) $(SHOBJS:.os=.cc)
 
 include $(ACT_HOME)/scripts/Makefile.std
 
 $(EXE): $(MAIN) $(LIB) $(LIBACTDEPEND)
 	$(CXX) $(CFLAGS) $(MAIN) -o $(EXE) $(LIBACT) -lactspef
 
-$(LIB): $(OBJS)
-	ar ruv $(LIB) spef.o
-	$(RANLIB) $(LIB)
+$(LIB1): $(LIBOBJ)
+	ar ruv $(LIB1) $(LIBOBJ)
+	$(RANLIB) $(LIB1)
+
+$(LIB2): $(SHOBJS)
+	$(ACT_HOME)/scripts/linkso $(LIB2) $(SHOBJS) $(SHLIBACTPASS)
+
+doc:
+	if [ ! -f Doxyfile ]; then doxygen -g; fi
+	doxygen
+
 
 -include Makefile.deps

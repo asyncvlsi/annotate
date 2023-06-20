@@ -340,6 +340,7 @@ struct spef_net {
   } u /** the parasitic information */;
 };
 
+class SpefCollection;
 
 /**
  *  API to read/write/query a SPEF file
@@ -354,16 +355,34 @@ class Spef {
   Spef(bool mangled_ids = false);
   ~Spef();
 
-  /* returns true on success, false on error */
+  /**
+   * Read in a SPEF file.
+   * @param fp the file pointer for the file to be read
+   * @return true on success, false on error
+   */
   bool Read (FILE *fp);
 
-  /* print */
+  /**
+   * Read in a SPEF file.
+   * @param name the name of the SPEF file
+   * @return true on success, false on error
+   */
+  bool Read (const char *name);
+
+  /**
+   * Print the SPEF data structure in SPEF format
+   * @param fp the output stream where the SPEF file should be printed
+   */
   void Print (FILE *fp);
 
- private:
+
+private:
+  /** The lexical analysis engine. This is non-NULL during the parsing
+      phase only.
+  */
   LEX_T *_l;
 
-  /* tokens */
+  /** tokens */
   int
 #define TOKEN(a,b) a,
 #include "spef.def"    
@@ -372,7 +391,7 @@ class Spef {
     _tok_pin_delim,
     _tok_prefix_bus_delim,
     _tok_suffix_bus_delim;
-    
+
   char *_prevString ();
   char *_getTokId();
   
@@ -406,34 +425,101 @@ class Spef {
 
   Act *_a;
 
-  /* data from the SPEF */
+  /// This holds the SPEF version string from the file
   char *_spef_version;
+
+  /// This holds the design name from the file
   char *_design_name;
+
+  /// This holds the date string
   char *_date;
+
+  /// This holds the vendor string
   char *_vendor;
+
+  /// This holds the program string (the program that generated this file)
   char *_program;
+
+  /// This holds the version number
   char *_version;
+
+  /// SI units for time. The actual time in SI units is the value
+  /// multipled by _time_unit
   double _time_unit;
+
+  /// units for capacitance.
   double _c_unit;
+
+  /// units for resistance
   double _r_unit;
+
+  /// units for inductance
   double _l_unit;
 
-  char _divider, _delimiter;
-  char _bus_prefix_delim, _bus_suffix_delim;
+  /// character used for path divider
+  char _divider;
+
+  /// character used to divide the name from the path/net to pin
+  char _delimiter;
+
+  /// character for array open parens
+  char _bus_prefix_delim;
+
+  /// character for array close parens
+  char _bus_suffix_delim;
 
   /* name map */
   struct iHashtable *_nH;
 
-  unsigned int _valid:1;	// valid spef!
+  /// 1 when the SPEF data stucture is populated and valid
+  unsigned int _valid:1;
 
+  /// An array of power nets in the design
   A_DECL (ActId *, _power_nets);
+
+  /// An array of ground nets in the design
   A_DECL (ActId *, _gnd_nets);
 
+  /// The top-level SPEF ports
   A_DECL (spef_ports, _ports);
+
+  /// The top-level SPEF physical ports
   A_DECL (spef_ports, _phyports);
 
+  /// SPEF defines, if any
   A_DECL (spef_defines, _defines);
+
+  /// The SPEF nets with parasitic information
   A_DECL (spef_net, _nets);
+
+  friend class SpefCollection;
+};
+
+/**
+ *  A SPEF collection is a collection of individual parasitic SPEF
+ *  files.
+ */
+class SpefCollection {
+public:
+  SpefCollection();
+  ~SpefCollection();
+
+  /**
+   * Add a SPEF file to the Spef collection
+   * @param name the name of the SPEF file
+   * @return true on success, false on error
+   */
+  bool addSPEF (const char *name);
+
+  /**
+   * Read in extract file
+   * @param name the name of the SPEF file
+   * @return true on success, false on error
+   */
+  bool ReadExt (const char *name);
+
+private:
+  struct Hashtable *H;		// hash of spef design names
 };
 
 

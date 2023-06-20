@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <common/misc.h>
+#include <common/ext.h>
 #include "spef.h"
 
 #define MAP_GET_PTR(x) SPEF_GET_PTR(x)
@@ -211,6 +212,16 @@ Spef::~Spef()
     }
   }
   A_FREE (_defines);
+}
+
+bool Spef::Read (const char *name)
+{
+  FILE *fp = fopen (name, "r");
+  if (!fp) {
+    fprintf (fp, "Could not open file `%s'", name);
+    return false;
+  }
+  return Read (fp);
 }
 
 bool Spef::Read (FILE *fp)
@@ -1882,4 +1893,19 @@ void Spef::Print (FILE *fp)
       fprintf (fp, "\n");
     }
   }
+}
+
+
+
+bool SpefCollection::ReadExt (const char *name)
+{
+  struct ext_file *e;
+
+  ext_validate_timestamp (name);
+  e = ext_read (name);
+
+  /* 
+   * convert to SPEF data structure
+   */
+  return true;
 }

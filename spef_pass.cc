@@ -25,13 +25,15 @@
 void spef_pass_init (ActPass *ap)
 {
   Act *a = ap->getAct();
+  ActDynamicPass *adp = dynamic_cast<ActDynamicPass *>(ap);
+  Assert (adp, "Hmm..");
 
   ActPass *nlp = a->pass_find ("prs2net");
 
   if (!nlp) {
     nlp = new ActNetlistPass (a);
   }
-  ap->AddDependency ("prs2net");
+  adp->addDependency ("prs2net");
 }
 
 /* Not defining this

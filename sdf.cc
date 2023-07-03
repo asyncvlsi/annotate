@@ -358,23 +358,32 @@ bool SDF::_read_cell()
       ERR_RET;
     }
 
-    // skip timing spec
-    if (!_mustbe (_tok_lpar)) {
-      A_NEXT (_cells).clear();
-      ERR_RET;
-    }
-    int count = 1;
-    while (count != -1 && !lex_eof (_l)) {
-      if (lex_sym (_l) == _tok_lpar) {
-	count++;
+
+    // we only parse DELAY annotations
+    while (!lex_eof (_l) && !lex_have (_l, _tok_rpar)) {
+      if (!_mustbe (_tok_lpar)) {
+	A_NEXT (_cells).clear();
+	ERR_RET;
       }
-      else if (lex_sym (_l) == _tok_rpar) {
-	count--;
+      if (lex_have (_l, _DELAY)) {
+	_skip_to_endpar ();
       }
-      lex_getsym (_l);
+      else if (lex_have (_l, _TIMINGCHECK) || lex_have (_l, _TIMINGENV)
+	       || lex_have (_l, _LABEL)) {
+	_skip_to_endpar ();
+      }
+      else {
+	A_NEXT (_cells).clear();
+	ERR_RET;
+      }
+      if (!_mustbe (_tok_rpar)) {
+	A_NEXT (_cells).clear();
+	ERR_RET;
+      }
     }
 
     if (lex_eof (_l)) {
+      A_NEXT (_cells).clear();
       ERR_RET;
     }
     else {
@@ -390,7 +399,7 @@ bool SDF::_read_cell()
 
 void SDF::Print (FILE *fp)
 {
-  fprintf (fp, "Status: %s\n", _valid ? "valid" : "invalid");
+  fprintf (fp, "// Status: %s\n", _valid ? "valid" : "invalid");
   fprintf (fp, "(DELAYFILE\n");
 #define EMIT_STRING(name,prefix)			\
   if (_h.prefix) {					\
@@ -513,4 +522,22 @@ ActId *SDF::_parse_hier_id ()
     fprintf (stderr, "Failed to parse hierarchical identifier!");
     return NULL;
   }
+}
+
+
+void SDF::_skip_to_endpar ()
+{
+  int count = 1;
+  while (count != 0 && !lex_eof (_l)) {
+    if (lex_sym (_l) == _tok_lpar) {
+      count++;
+    }
+    else if (lex_sym (_l) == _tok_rpar) {
+      count--;
+    }
+    if (count > 0) {
+      lex_getsym (_l);
+    }
+  }
+  return;
 }

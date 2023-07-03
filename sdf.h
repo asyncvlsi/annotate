@@ -107,6 +107,7 @@ class SDF {
   bool _read_sdfheader ();
   bool _mustbe (int tok);
   bool _read_cell ();
+  void _skip_to_endpar ();
   ActId *_parse_hier_id ();
   
 };

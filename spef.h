@@ -62,6 +62,8 @@ struct spef_triplet {
 
   /// worst-case value
   float worst;
+
+  bool issingleton() { return (best == typ && best == worst) ? true : false; }
 };
 
 
@@ -375,6 +377,15 @@ class Spef {
    */
   void Print (FILE *fp);
 
+
+  /**
+   * Parse a SPEF triplet
+   * @param l is the lexer
+   * @param colon is the token name for ":"
+   * @param t is used to return the value of the triplet
+   * @return true if successful, false otherwise
+   */
+  static bool getParasitics (LEX_T *l, int colon, spef_triplet *t);
 
 private:
   /** The lexical analysis engine. This is non-NULL during the parsing

@@ -3,7 +3,8 @@ i386*
 x86_64*
 Makefile.deps
 test_spef.*
-libactspef*
+test_sdf.*
+libactannotate*
 spef_pass_*.so
 Doxyfile
 html

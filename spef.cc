@@ -218,10 +218,12 @@ bool Spef::Read (const char *name)
 {
   FILE *fp = fopen (name, "r");
   if (!fp) {
-    fprintf (fp, "Could not open file `%s'", name);
+    fprintf (fp, "Spef::Read(): Could not open file `%s'", name);
     return false;
   }
-  return Read (fp);
+  bool ret = Read (fp);
+  fclose (fp);
+  return ret;
 }
 
 bool Spef::Read (FILE *fp)
@@ -1506,40 +1508,45 @@ ActId *Spef::_getIndex()
   }
 }
 
-bool Spef::_getParasitics (spef_triplet *t)
+bool Spef::getParasitics (LEX_T *l, int colon, spef_triplet *t)
 {
-  lex_push_position (_l);
+  lex_push_position (l);
 
-  if (!lex_have_number (_l, &t->typ)) {
-    lex_set_position (_l);
-    lex_pop_position (_l);
+  if (!lex_have_number (l, &t->typ)) {
+    lex_set_position (l);
+    lex_pop_position (l);
     return false;
   }
 
-  if (!lex_have (_l, _tok_colon)) {
+  if (!lex_have (l, colon)) {
     t->best = t->typ;
     t->worst = t->typ;
-    lex_pop_position (_l);
+    lex_pop_position (l);
     return true;
   }
   t->best = t->typ;
-  if (!lex_have_number (_l, &t->typ)) {
-    lex_set_position (_l);
-    lex_pop_position (_l);
+  if (!lex_have_number (l, &t->typ)) {
+    lex_set_position (l);
+    lex_pop_position (l);
     return false;
   }
-  if (!lex_have (_l, _tok_colon)) {
-    lex_set_position (_l);
-    lex_pop_position (_l);
+  if (!lex_have (l, colon)) {
+    lex_set_position (l);
+    lex_pop_position (l);
     return false;
   }
-  if (!lex_have_number (_l, &t->worst)) {
-    lex_set_position (_l);
-    lex_pop_position (_l);
+  if (!lex_have_number (l, &t->worst)) {
+    lex_set_position (l);
+    lex_pop_position (l);
     return false;
   }
-  lex_pop_position (_l);
+  lex_pop_position (l);
   return true;
+}
+
+bool Spef::_getParasitics (spef_triplet *t)
+{
+  return getParasitics (_l, _tok_colon, t);
 }
 
 bool Spef::_getComplexParasitics (spef_triplet *re, spef_triplet *im)

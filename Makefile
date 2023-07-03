@@ -19,19 +19,21 @@
 #
 #-------------------------------------------------------------------------
 EXE=test_spef.$(EXT)
-LIB1=libactspef_$(EXT).a
+EXE2=test_sdf.$(EXT)
+LIB1=libactannotate_$(EXT).a
 LIB2=spef_pass_$(EXT).so
 LIB=$(LIB1) $(LIB2)
-TARGETS=$(EXE)
+TARGETS=$(EXE) $(EXE2)
 TARGETLIBS=$(LIB)
-TARGETINCS=spef.h spef.def
+TARGETINCS=spef.h spef.def sdf.h sdf.def
 TARGETINCSUBDIR=act
 
-LIBOBJ=spef.o
+LIBOBJ=spef.o sdf.o
 
 MAIN=main.o
+MAIN2=main2.o
 
-OBJS=$(MAIN) $(LIBOBJ)
+OBJS=$(MAIN) $(LIBOBJ) $(MAIN2)
 SHOBJS=spef_pass.os spef.os
 
 SRCS=$(OBJS:.o=.cc) $(SHOBJS:.os=.cc)
@@ -39,7 +41,10 @@ SRCS=$(OBJS:.o=.cc) $(SHOBJS:.os=.cc)
 include $(ACT_HOME)/scripts/Makefile.std
 
 $(EXE): $(MAIN) $(LIB) $(LIBACTDEPEND)
-	$(CXX) $(CFLAGS) $(MAIN) -o $(EXE) $(LIBACT) -lactspef
+	$(CXX) $(CFLAGS) $(MAIN) -o $(EXE) $(LIBACT) -lactannotate
+
+$(EXE2): $(MAIN2) $(LIB) $(LIBACTDEPEND)
+	$(CXX) $(CFLAGS) $(MAIN2) -o $(EXE2) $(LIBACT) -lactannotate
 
 $(LIB1): $(LIBOBJ)
 	ar ruv $(LIB1) $(LIBOBJ)

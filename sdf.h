@@ -38,9 +38,39 @@
 class SDF;
 
 
+/*
+ *
+ * SDF permits up to six different delay specs. These delays specify
+ *
+ *  0->1, 1->0, 0->Z, Z->1, 1->Z, Z->0
+ *
+ * We currently only use 0->1 and 1->0.
+ *
+ * Im addition, pulse widths e-limit and r-limit can be specified.
+ *   
+ * The r-limit (rejection limit) says that a pulse has to be at least
+ * a minimum width before it propagates. Any narrower pulse is
+ * filtered.
+ *
+ * The e-limit (error limit), which should be greater than the r-limit
+ * to be meaningful, says that any pulse narrower than the e-limit
+ * (but at least the r-limit) will cause the output to become X,
+ * rather than propagate.
+ *
+ */
+
+struct sdf_delay {
+  spef_triplet z2o;		///< zero-to-one delay
+  spef_triplet o2z;		///< one-to-zero delay
+};
+
 struct sdf_cell {
-  char *celltype;
-  ActId *inst;
+  char *celltype;		///< This is the type name, but it can
+				///< also be a hierarchy path (!)
+  
+  ActId *inst;			///< NULL if this is *, otherwise it
+				///< is a hierarchy path
+  
   // delay record
 
   sdf_cell() { celltype = NULL; inst = NULL; }
@@ -109,7 +139,11 @@ class SDF {
   bool _read_cell ();
   void _skip_to_endpar ();
   ActId *_parse_hier_id ();
-  
+  void _errmsg (const char *buf);
+  bool _read_delval (spef_triplet *f);
+  bool _read_delay (sdf_delay *d);
+  const char *_err_ctxt;
+
 };
 
 

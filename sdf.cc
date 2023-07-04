@@ -53,6 +53,8 @@ SDF::SDF (bool mangled_ids)
   _h.temp.worst = 25.0;
   _h.timescale = 1.0;
 
+  _err_ctxt = NULL;
+
   A_INIT (_cells);
 
   if (mangled_ids) {
@@ -110,13 +112,25 @@ bool SDF::Read (const char *name)
 }
 
 
+void SDF::_errmsg (const char *buf)
+{
+  char *s = lex_errstring (_l);
+  if (_err_ctxt) {
+    fprintf (stderr, "SDF::PARSER(): Context `%s': Expecting `%s', looking-at: %s\n%s\n",
+	     _err_ctxt, buf, lex_tokenstring (_l), s);
+  }
+  else {
+    fprintf (stderr, "SDF::PARSER(): Expecting `%s', looking-at: %s\n%s\n",
+	     buf, lex_tokenstring (_l), s);
+  }
+  FREE (s);
+}
+  
+
 bool SDF::_mustbe (int tok)
 {
   if (!lex_have (_l, tok)) {
-    char *s = lex_errstring (_l);
-    fprintf (stderr, "SDF::PARSER(): Expecting `%s', looking-at: %s\n%s\n",
-	     lex_tokenname (_l, tok), lex_tokenstring (_l), s);
-    FREE (s);
+    _errmsg (lex_tokenname (_l, tok));
     return false;
   }
   return true;
@@ -366,6 +380,37 @@ bool SDF::_read_cell()
 	ERR_RET;
       }
       if (lex_have (_l, _DELAY)) {
+	if (lex_have (_l, _tok_lpar)) {
+	  if (lex_sym (_l) == _ABSOLUTE || lex_sym (_l) == _INCREMENT) {
+	    int type = (lex_sym (_l) == _ABSOLUTE) ? 0 : 1;
+
+	    // delays are:
+	    // IOPATH
+	    // RETAIN
+	    // COND, CONDELSE
+	    // PORT
+	    // INTERCONNECT
+	    // NETDELAY
+	    // DEVICE
+	    
+	    _skip_to_endpar ();
+	  }
+	  else if (lex_sym (_l) == _PATHPULSE
+		   || lex_sym (_l) == _PATHPULSEPERCENT) {
+	    // ignore these
+	    _skip_to_endpar ();
+	  }
+	  else {
+	    A_NEXT (_cells).clear();
+	    ERR_RET;
+	  }
+	  if (!_mustbe (_tok_rpar)) {
+	    A_NEXT (_cells).clear();
+	    ERR_RET;
+	  }
+	}
+
+	
 	_skip_to_endpar ();
       }
       else if (lex_have (_l, _TIMINGCHECK) || lex_have (_l, _TIMINGENV)
@@ -540,4 +585,99 @@ void SDF::_skip_to_endpar ()
     }
   }
   return;
+}
+
+static int lex_have_number (LEX_T *l, float *d)
+{
+  if (lex_sym (l) == l_integer) {
+    *d = lex_integer (l);
+    lex_getsym (l);
+    return 1;
+  }
+  else if (lex_sym (l) == l_real) {
+    *d = lex_real (l);
+    lex_getsym (l);
+    return 1;
+  }
+  return 0;
+}
+
+bool SDF::_read_delval (spef_triplet *f)
+{
+  spef_triplet dummy;
+  
+  if (!lex_have (_l, _tok_lpar)) {
+    return false;
+  }
+
+  _err_ctxt = "parsing delval";
+
+  if (!lex_have (_l, _tok_lpar)) {
+    // rvalue only, already handled the (
+    f->typ = -1000;
+    Spef::getParasitics (_l, _tok_colon, f); // optional
+    return _mustbe (_tok_rpar);
+  }
+
+  // parsed: ( (
+  f->typ = -1000;
+  Spef::getParasitics (_l, _tok_colon, f); // optional
+  // delay
+  if (!_mustbe (_tok_rpar)) {
+    return false;
+  }
+
+  // parsed: ( rvalue
+
+  if (!_mustbe (_tok_lpar)) {
+    return false;
+  }
+  Spef::getParasitics (_l, _tok_colon, &dummy); // optional
+  // r-limit and possibly e-limit
+  if (!_mustbe (_tok_rpar)) {
+    return false;
+  }
+
+  // parsed: ( rvalue rvalue
+  if (lex_have (_l, _tok_lpar)) {
+    Spef::getParasitics (_l, _tok_colon, &dummy); // optional
+    // e-limit
+    if (!_mustbe (_tok_rpar)) {
+      return false;
+    }
+  }
+  return _mustbe (_tok_rpar);
+}
+
+bool SDF::_read_delay (sdf_delay *s)
+{
+  int count = 0;
+
+  if (lex_sym (_l) == _tok_lpar) {
+    if (!_read_delval (&s->z2o)) {
+      return false;
+    }
+  }
+  else {
+    _errmsg ("delay");
+    return false;
+  }
+  if (lex_sym (_l) == _tok_lpar) {
+    if (!_read_delval (&s->o2z)) {
+      return false;
+    }
+  }
+  else {
+    s->o2z = s->z2o;
+    return true;
+  }
+  count = 2;
+  while (count < 12 && lex_sym (_l) == _tok_lpar) {
+    spef_triplet dummy;
+    if (!_read_delval (&dummy)) {
+      return false;
+    }
+    count++;
+  }
+  return true;
 }

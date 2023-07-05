@@ -396,7 +396,7 @@ private:
   /** tokens */
   int
 #define TOKEN(a,b) a,
-#include "spef.def"    
+#include <act/spef.def>
 
     _tok_hier_delim,
     _tok_pin_delim,

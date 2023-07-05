@@ -92,7 +92,8 @@ struct sdf_delay {
 enum sdf_cond_expr_type {
   SDF_AND, SDF_OR, SDF_NOT, SDF_VAR,
   SDF_XOR, SDF_EQ, SDF_NE,
-  SDF_TRUE, SDF_FALSE, SDF_BAD
+  SDF_TRUE, SDF_FALSE, SDF_BAD,
+  SDF_ELSE
 };
 
 struct sdf_cond_expr {
@@ -103,8 +104,11 @@ struct sdf_cond_expr {
     t = _t; l = x; r = y;
   }
 
+  bool isElse() {
+    return t == SDF_ELSE ? true : false;
+  }
 
-  void Print (FILE *fp) {
+  void Print (FILE *fp, char delim) {
     switch (t) {
     case SDF_TRUE:
       fprintf (fp, "1'b0");
@@ -113,44 +117,42 @@ struct sdf_cond_expr {
       fprintf (fp, "1'b1");
       break;
     case SDF_VAR:
-      ((ActId *)l)->Print (fp, NULL, 0, '/');
+      ((ActId *)l)->Print (fp, NULL, 0, delim);
       break;
     case SDF_NOT:
       fprintf (fp, "~");
-      l->Print (fp);
+      l->Print (fp, delim);
       break;
     case SDF_AND:
-      l->Print (fp);
+      l->Print (fp, delim);
       fprintf (fp, " & ");
-      r->Print (fp);
+      r->Print (fp, delim);
       break;
     case SDF_OR:
-      l->Print (fp);
+      l->Print (fp, delim);
       fprintf (fp, " | ");
-      r->Print (fp);
+      r->Print (fp, delim);
       break;
     case SDF_XOR:
-      l->Print (fp);
+      l->Print (fp, delim);
       fprintf (fp, " ^ ");
-      r->Print (fp);
+      r->Print (fp, delim);
       break;
     case SDF_EQ:
-      l->Print (fp);
+      l->Print (fp, delim);
       fprintf (fp, " == ");
-      r->Print (fp);
+      r->Print (fp, delim);
       break;
     case SDF_NE:
-      l->Print (fp);
+      l->Print (fp, delim);
       fprintf (fp, " != ");
-      r->Print (fp);
+      r->Print (fp, delim);
       break;
     default:
       fatal_error ("BAD condition!");
       break;
     }
   }
-
-    
   
   ~sdf_cond_expr() {
     if (t == SDF_BAD) {
@@ -194,18 +196,18 @@ struct sdf_path {
   ActId *to;			///< target
   sdf_delay d;
 
-  void Print (FILE *fp) {
+  void Print (FILE *fp, char delim) {
     fprintf (fp, "(%s ", _names[type]);
     if (e) {
-      e->Print (fp);
+      e->Print (fp, delim);
       fprintf (fp, " ");
     }
     if (from) {
-      from->Print (fp);
+      from->Print (fp, NULL, 0, delim);
       fprintf (fp, " ");
     }
     if (to) {
-      to->Print (fp);
+      to->Print (fp, NULL, 0, delim);
       fprintf (fp, " ");
     }
     d.Print (fp);

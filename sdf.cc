@@ -405,54 +405,125 @@ bool SDF::_read_cell()
 	      p = &A_NEXT (cur->_paths);
 	      new (p) sdf_path();
 	      p->abs = type;
-	      if (lex_have (_l, _COND)) {
-		_skip_to_endpar ();
-	      }
-	      else if (lex_have (_l, _CONDELSE)) {
-		_skip_to_endpar ();
-	      }
-	      if (lex_have (_l, _IOPATH)) {
-		p->type = SDF_ELEM_IOPATH;
-		if (lex_sym (_l) == _tok_lpar) {
-		  /* edge specifier, ignored... */
-		  _skip_to_endpar();
-		}
-		else {
-		  p->from = _parse_hier_id ();
-		  if (!p->from) {
+	      if (lex_sym (_l) == _COND || lex_sym (_l) == _CONDELSE ||
+		  lex_sym (_l) == _IOPATH) {
+		if (lex_have (_l, _COND)) {
+		  if (lex_have (_l, l_string)) {
+		    // ignore the cond string label
+		  }
+		  sdf_cond_expr *e = _parse_expr ();
+		  if (!e) {
+		    ERR_RET;
+		  }
+		  p->e = e;
+		  if (!_mustbe (_tok_lpar)) {
 		    p->clear();
 		    ERR_RET;
 		  }
-		  p->to = _parse_hier_id ();
-		  if (!p->to) {
-		    p->clear ();
+		}
+		else if (lex_have (_l, _CONDELSE)) {
+		  p->e = new sdf_cond_expr();
+		  p->e->t = SDF_ELSE;
+		  if (!_mustbe (_tok_lpar)) {
+		    p->clear();
 		    ERR_RET;
 		  }
-		  lex_push_position (_l);
-		  if (lex_have (_l, _tok_lpar) && lex_have (_l, _RETAIN)) {
-		    lex_pop_position (_l);
+		}
+		if (lex_have (_l, _IOPATH)) {
+		  p->type = SDF_ELEM_IOPATH;
+		  if (lex_sym (_l) == _tok_lpar) {
+		    /* edge specifier, ignored... */
+		    p->clear();
 		    _skip_to_endpar();
 		  }
-		  lex_set_position (_l);
-		  lex_pop_position (_l);
-		  if (!_read_delay (&p->d)) {
-		    p->clear ();
+		  else {
+		    p->from = _parse_hier_id ();
+		    if (!p->from) {
+		      p->clear();
+		      ERR_RET;
+		    }
+		    p->to = _parse_hier_id ();
+		    if (!p->to) {
+		      p->clear ();
+		      ERR_RET;
+		    }
+		    lex_push_position (_l);
+		    if (lex_have (_l, _tok_lpar) && lex_have (_l, _RETAIN)) {
+		      lex_pop_position (_l);
+		      _skip_to_endpar();
+		    }
+		    lex_set_position (_l);
+		    lex_pop_position (_l);
+		    if (!_read_delay (&p->d)) {
+		      p->clear ();
+		      ERR_RET;
+		    }
+		    A_INC (cur->_paths);
+		  }
+		}
+		else {
+		  p->clear();
+		  ERR_RET;
+		}
+		if (p->e) {
+		  if (!_mustbe (_tok_rpar)) {
+		    p->clear();
 		    ERR_RET;
 		  }
-		  A_INC (cur->_paths);
 		}
 	      }
 	      else if (lex_have (_l, _PORT)) {
-		_skip_to_endpar();
+		p->type = SDF_ELEM_PORT;
+		p->to = _parse_hier_id ();
+		if (!p->to) {
+		  p->clear ();
+		  ERR_RET;
+		}
+		if (!_read_delay (&p->d)) {
+		  p->clear ();
+		  ERR_RET;
+		}
+		A_INC (cur->_paths);
 	      }
 	      else if (lex_have (_l, _INTERCONNECT)) {
-		_skip_to_endpar();
+		p->type = SDF_ELEM_INTERCONN;
+		p->from = _parse_hier_id ();
+		if (!p->from) {
+		  p->clear();
+		  ERR_RET;
+		}
+		p->to = _parse_hier_id ();
+		if (!p->to) {
+		  p->clear ();
+		  ERR_RET;
+		}
+		if (!_read_delay (&p->d)) {
+		  p->clear ();
+		  ERR_RET;
+		}
+		A_INC (cur->_paths);
 	      }
 	      else if (lex_have (_l, _NETDELAY)) {
-		_skip_to_endpar();
+		p->type = SDF_ELEM_NETDELAY;
+		p->to = _parse_hier_id ();
+		if (!p->to) {
+		  p->clear ();
+		  ERR_RET;
+		}
+		if (!_read_delay (&p->d)) {
+		  p->clear ();
+		  ERR_RET;
+		}
+		A_INC (cur->_paths);
 	      }
 	      else if (lex_have (_l, _DEVICE)) {
-		_skip_to_endpar();
+		p->type = SDF_ELEM_DEVICE;
+		p->to = _parse_hier_id ();
+		if (!_read_delay (&p->d)) {
+		  p->clear ();
+		  ERR_RET;
+		}
+		A_INC (cur->_paths);
 	      }
 	      else {
 		ERR_RET;
@@ -597,8 +668,8 @@ void SDF::Print (FILE *fp)
 	  fprintf (fp, "    (INCREMENT\n");
 	}
       }
-      fprintf (fp, "    ");
-      p->Print (fp);
+      fprintf (fp, "      ");
+      p->Print (fp, _h.divider);
       fprintf (fp, "\n");
     }
     if (prev != -1) {

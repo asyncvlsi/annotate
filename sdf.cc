@@ -45,6 +45,9 @@ SDF::SDF (bool mangled_ids)
 #include "sdf.def"
   _valid = false;
 
+  _last_error_report_line = -1;
+  _last_error_report_col = -1;
+
   _h.sdfversion = NULL;
   _h.designname = NULL;
   _h.date = NULL;
@@ -122,7 +125,18 @@ bool SDF::Read (const char *name)
 
 void SDF::_errmsg (const char *buf)
 {
-  char *s = lex_errstring (_l);
+  char *s;
+
+  if (lex_linenumber (_l) < _last_error_report_line ||
+      (lex_linenumber (_l) == _last_error_report_line &&
+       lex_colnumber (_l) < _last_error_report_col)) {
+    return;
+  }
+  _last_error_report_line = lex_linenumber (_l);
+  _last_error_report_col = lex_colnumber (_l);
+
+  s = lex_errstring (_l);
+  
   if (_err_ctxt) {
     fprintf (stderr, "SDF::PARSER(): Context `%s': Expecting `%s', looking-at: %s\n%s\n",
 	     _err_ctxt, buf, lex_tokenstring (_l), s);
@@ -138,7 +152,6 @@ void SDF::_errmsg (const char *buf)
 bool SDF::_mustbe (int tok)
 {
   if (!lex_have (_l, tok)) {
-    _errmsg (lex_tokenname (_l, tok));
     return false;
   }
   return true;
@@ -153,10 +166,16 @@ bool SDF::Read (FILE *fp)
   lex_getsym (_l);
 
   // (
-  if (!_mustbe (_tok_lpar)) goto error;
+  if (!_mustbe (_tok_lpar)) {
+    _errmsg ("(");
+    goto error;
+  }
 
   // DELAYFILE
-  if (!_mustbe (_DELAYFILE)) goto error;
+  if (!_mustbe (_DELAYFILE)) {
+    _errmsg ("DELAYFILE");
+    goto error;
+  }
 
   // sdf header
   if (!_read_sdfheader ()) goto error;
@@ -166,7 +185,10 @@ bool SDF::Read (FILE *fp)
   }
 
   // )
-  if (!_mustbe (_tok_rpar)) goto error;
+  if (!_mustbe (_tok_rpar)) {
+    _errmsg (")");
+    goto error;
+  }
 
   if (count == 0) {
     fprintf (stderr, "SDF::PARSER(): No cells specified in SDF file!\n");
@@ -192,9 +214,18 @@ error:
 bool SDF::_read_sdfheader ()
 {
   char *tmp;
-  if (!_mustbe (_tok_lpar)) return false;
-  if (!_mustbe (_SDFVERSION)) return false;
-  if (!_mustbe (l_string)) return false;
+  if (!_mustbe (_tok_lpar)) {
+    _errmsg ("sdf-header");
+    return false;
+  }
+  if (!_mustbe (_SDFVERSION)) {
+    _errmsg ("SDFVERSION");
+    return false;
+  }
+  if (!_mustbe (l_string)) {
+    _errmsg ("version-string");
+    return false;
+  }
 
   if (_h.sdfversion) {
     FREE (_h.sdfversion);
@@ -202,12 +233,15 @@ bool SDF::_read_sdfheader ()
   _h.sdfversion = Strdup (lex_prev (_l)+1);
   _h.sdfversion[strlen (_h.sdfversion)-1] = '\0';
 
-  if (!_mustbe (_tok_rpar)) return false;
+  if (!_mustbe (_tok_rpar)) {
+    _errmsg (")");
+    return false;
+  }
 
 #define PROCESS_STRING(field)			\
   do {						\
     lex_pop_position (_l);			\
-    if (!_mustbe (l_string)) return false;	\
+    if (!_mustbe (l_string)) { _errmsg ("string"); return false; }	\
     if (_h.field) {				\
       FREE (_h.field);				\
     }						\
@@ -312,7 +346,10 @@ bool SDF::_read_sdfheader ()
 	lex_pop_position (_l);
 	break;
       }
-      if (!_mustbe (_tok_rpar)) return false;
+      if (!_mustbe (_tok_rpar)) {
+	_errmsg (")");
+	return false;
+      }
     }
     else {
       lex_set_position (_l);
@@ -333,15 +370,19 @@ bool SDF::_read_cell()
 
   if (lex_have (_l, _tok_lpar)) {
     if (!_mustbe (_CELL)) {
+      _errmsg ("CELL");
       ERR_RET;
     }
     if (!_mustbe (_tok_lpar)) {
+      _errmsg ("(CELLTYPE");
       ERR_RET;
     }
     if (!_mustbe (_CELLTYPE)) {
+      _errmsg ("CELLTYPE");
       ERR_RET;
     }
     if (!_mustbe (l_string)) {
+      _errmsg ("string");
       ERR_RET;
     }
     A_NEW (_cells, struct sdf_cell);
@@ -352,14 +393,17 @@ bool SDF::_read_cell()
     cur = &A_NEXT(_cells);
     
     if (!_mustbe (_tok_rpar)) {
+      _errmsg (")");
       ERR_RET;
     }
     /* ( INSTANCE  ) */
     if (!_mustbe (_tok_lpar)) {
+      _errmsg ("(INSTANCE");
       ERR_RET;
     }
     
     if (!_mustbe (_INSTANCE)) {
+      _errmsg ("INSTANCE");
       ERR_RET;
     }
   
@@ -371,18 +415,20 @@ bool SDF::_read_cell()
       // parse hierarchical id
       cur->inst = _parse_hier_id ();
       if (!cur->inst) {
+	_errmsg ("path-to-inst");
 	ERR_RET;
       }
     }
 
     if (!_mustbe (_tok_rpar)) {
+      _errmsg (")");
       ERR_RET;
     }
-
 
     // we only parse DELAY annotations
     while (!lex_eof (_l) && !lex_have (_l, _tok_rpar)) {
       if (!_mustbe (_tok_lpar)) {
+	_errmsg ("(");
 	ERR_RET;
       }
       if (lex_have (_l, _DELAY)) {
@@ -553,6 +599,7 @@ bool SDF::_read_cell()
       }
       else {
 	A_NEXT (_cells).clear();
+	_errmsg ("delay/timing checks");
 	ERR_RET;
       }
       if (!_mustbe (_tok_rpar)) {
@@ -653,6 +700,7 @@ void SDF::Print (FILE *fp)
     }
     fprintf (fp, ")\n");
 
+    fprintf (fp, "  (DELAY\n");
     int prev = -1;
     for (int j=0; j < A_LEN (_cells[i]._paths); j++) {
       sdf_path *p = &_cells[i]._paths[j];
@@ -675,6 +723,7 @@ void SDF::Print (FILE *fp)
     if (prev != -1) {
       fprintf (fp, "    )\n");
     }
+    fprintf (fp, "  )\n");
     fprintf (fp, "  )\n");
   }
   

@@ -176,18 +176,31 @@ struct sdf_cond_expr {
 
 
 #define SDF_ELEM_NONE        0
+
 #define SDF_ELEM_IOPATH      1
+   /**< IOPATH path delay. This goes from an input pin to an output
+        pin of a device. It can have a condition specified as well **/
+
 #define SDF_ELEM_PORT        2
+   /**< PORT delay: input delay to an input port of a device */
+
 #define SDF_ELEM_INTERCONN   3
+   /**< INTERCONNECT delay: from driver to another input pin */
+
 #define SDF_ELEM_DEVICE      4
+   /**< DEVICE delay: with an optional output port, this is the input
+        to output delay for the device */
+
 #define SDF_ELEM_NETDELAY    5
+  /**< NETDELAY delay: used to have a single delay for a net, from all
+       drivers to all input pins */
 
 struct sdf_path {
   static const char *_names[];
   
   unsigned int type:3;		///< 1 = iopath, 2 = port, 3 =
 				///< interconnect, 4 = device, 5 =
-				///netdelay
+				///< netdelay
   unsigned int abs:1;		//<  1 for ABSOLUTE, 2 for INCREMENT
 
   
@@ -197,11 +210,18 @@ struct sdf_path {
   sdf_delay d;
 
   void Print (FILE *fp, char delim) {
-    fprintf (fp, "(%s ", _names[type]);
     if (e) {
-      e->Print (fp, delim);
-      fprintf (fp, " ");
+      fprintf (fp, "(COND");
+      if (e->isElse()) {
+	fprintf (fp, "ELSE ");
+      }
+      else {
+	fprintf (fp, " ");
+	e->Print (fp, delim);
+	fprintf (fp, " ");
+      }
     }
+    fprintf (fp, "(%s ", _names[type]);
     if (from) {
       from->Print (fp, NULL, 0, delim);
       fprintf (fp, " ");
@@ -212,6 +232,9 @@ struct sdf_path {
     }
     d.Print (fp);
     fprintf (fp, ")");
+    if (e) {
+      fprintf (fp, " )");
+    }
   }
 
   sdf_path() {
@@ -257,7 +280,9 @@ struct sdf_cell {
   }
   void clear() {
     if (celltype) FREE(celltype);
+    celltype = NULL;
     if (inst) delete inst;
+    inst = NULL;
     for (int i=0; i < A_LEN (_paths); i++) {
       _paths[i].~sdf_path();
     }
@@ -340,6 +365,7 @@ class SDF {
   sdf_cond_expr *_parse_expr ();
   
   const char *_err_ctxt;
+  int _last_error_report_line, _last_error_report_col;
 
   // actual delay records
 };

@@ -333,7 +333,7 @@ class SDF {
     spef_triplet voltage;
     char *process;
     spef_triplet temp;
-    float timescale;
+    double timescale;
   } _h;
 
   A_DECL (struct sdf_cell, _cells);

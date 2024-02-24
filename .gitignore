@@ -5,7 +5,7 @@ Makefile.deps
 test_spef.*
 test_sdf.*
 libactannotate*
-spef_pass_*.so
+annotate_pass_*.so
 Doxyfile
 html
 latex

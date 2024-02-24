@@ -21,7 +21,7 @@
 EXE=test_spef.$(EXT)
 EXE2=test_sdf.$(EXT)
 LIB1=libactannotate_$(EXT).a
-LIB2=spef_pass_$(EXT).so
+LIB2=annotate_pass_$(EXT).so
 LIB=$(LIB1) $(LIB2)
 TARGETS=$(EXE) $(EXE2)
 TARGETLIBS=$(LIB)
@@ -34,7 +34,7 @@ MAIN=main.o
 MAIN2=main2.o
 
 OBJS=$(MAIN) $(LIBOBJ) $(MAIN2)
-SHOBJS=spef_pass.os spef.os
+SHOBJS=annotate_pass.os spef.os sdf.os
 
 SRCS=$(OBJS:.o=.cc) $(SHOBJS:.os=.cc)
 

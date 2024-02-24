@@ -1526,9 +1526,10 @@ bool Spef::getParasitics (LEX_T *l, int colon, spef_triplet *t)
   }
   t->best = t->typ;
   if (!lex_have_number (l, &t->typ)) {
-    lex_set_position (l);
-    lex_pop_position (l);
-    return false;
+    //lex_set_position (l);
+    //lex_pop_position (l);
+    //return false;
+    t->typ = t->best;
   }
   if (!lex_have (l, colon)) {
     lex_set_position (l);
@@ -1536,9 +1537,10 @@ bool Spef::getParasitics (LEX_T *l, int colon, spef_triplet *t)
     return false;
   }
   if (!lex_have_number (l, &t->worst)) {
-    lex_set_position (l);
-    lex_pop_position (l);
-    return false;
+    //lex_set_position (l);
+    //lex_pop_position (l);
+    //return false;
+    t->worst = t->typ;
   }
   lex_pop_position (l);
   return true;

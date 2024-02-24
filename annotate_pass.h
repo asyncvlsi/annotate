@@ -18,13 +18,13 @@
  *
  **************************************************************************
  */
-#ifndef __ACT_SPEF_PASS_H__
-#define __ACT_SPEF_PASS_H__
+#ifndef __ACT_ANNOTATE_PASS_H__
+#define __ACT_ANNOTATE_PASS_H__
 
 
 /**
  * 
- * @file spef_pass.h
+ * @file annotate_pass.h
  * @brief ACT pass that reads and merges in SPEF with netlist
  *
  */
@@ -32,16 +32,16 @@
 
 extern "C" {
 
-  void spef_pass_init (ActPass *ap);
-  void spef_pass_run (ActPass *ap, Process *p);
-  void spef_pass_recursive (ActPass *ap, Process *p, int mode);
-  void *spef_pass_proc (ActPass *ap, Process *p, int mode);
-  void *spef_pass_data (ActPass *ap, Data *d, int mode);
-  void *spef_pass_chan (ActPass *ap, Channel *c, int mode);
-  int spef_pass_runcmd (ActPass *ap, const char *name);
-  void spef_pass_free (ActPass *ap, void *v);
-  void spef_pass_done (ActPass *ap);
+  void annotate_pass_init (ActPass *ap);
+  void annotate_pass_run (ActPass *ap, Process *p);
+  void annotate_pass_recursive (ActPass *ap, Process *p, int mode);
+  void *annotate_pass_proc (ActPass *ap, Process *p, int mode);
+  void *annotate_pass_data (ActPass *ap, Data *d, int mode);
+  void *annotate_pass_chan (ActPass *ap, Channel *c, int mode);
+  int annotate_pass_runcmd (ActPass *ap, const char *name);
+  void annotate_pass_free (ActPass *ap, void *v);
+  void annotate_pass_done (ActPass *ap);
 
 }
 
-#endif /* __ACT_TEST_PASS_H__ */
+#endif /* __ACT_ANNOTATE_PASS_H__ */

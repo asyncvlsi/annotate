@@ -22,7 +22,7 @@
 #include <act/passes.h>
 #include "spef.h"
 
-void spef_pass_init (ActPass *ap)
+void annotate_pass_init (ActPass *ap)
 {
   Act *a = ap->getAct();
   ActDynamicPass *adp = dynamic_cast<ActDynamicPass *>(ap);
@@ -37,11 +37,11 @@ void spef_pass_init (ActPass *ap)
 }
 
 /* Not defining this
-void spef_pass_run (ActPass *ap, Process *p)
-void spef_pass_recursive (ActPass *ap, Process *p, int mode);
+void annotate_pass_run (ActPass *ap, Process *p)
+void annotate_pass_recursive (ActPass *ap, Process *p, int mode);
 */
 
-void *spef_pass_proc (ActPass *ap, Process *p, int mode)
+void *annotate_pass_proc (ActPass *ap, Process *p, int mode)
 {
   char * s= NULL;
   Spef *spf = NULL;
@@ -101,13 +101,13 @@ void *spef_pass_proc (ActPass *ap, Process *p, int mode)
   return NULL;
 }
 
-void spef_pass_free (ActPass *ap, void *v)
+void annotate_pass_free (ActPass *ap, void *v)
 {
   /* this should be NULL, ignore it */
 }
 
 
-void spef_pass_done (ActPass *ap)
+void annotate_pass_done (ActPass *ap)
 {
   printf ("Pass deleted!\n");
 }

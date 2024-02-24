@@ -407,9 +407,14 @@ bool SDF::_read_cell()
       ERR_RET;
     }
   
-    if (strcmp (lex_tokenstring (_l), "*") == 0) {
+    if (strcmp (lex_tokenstring (_l), "*") == 0 || lex_sym (_l) == _tok_rpar) {
       // we're good!
-      lex_getsym (_l);
+      if (lex_sym (_l) == _tok_rpar) {
+	/* nothing to do; implicit * */
+      }
+      else {
+	lex_getsym (_l);
+      }
     }
     else {
       // parse hierarchical id
@@ -759,6 +764,14 @@ ActId *SDF::_parse_hier_id ()
     lex_set_position (_l);
     lex_pop_position (_l);
     return NULL;
+  }
+
+  if (_a) {
+    char *tmp;
+    MALLOC (tmp, char, sz);
+    _a->unmangle_string (s, tmp, sz);
+    FREE (s);
+    s = tmp;
   }
 
   ActId *ret = ActId::parseId (s, _h.divider, '[', ']', _h.divider);

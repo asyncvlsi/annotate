@@ -481,36 +481,54 @@ bool SDF::_read_cell()
 		  }
 		}
 		if (lex_have (_l, _IOPATH)) {
+		  int have_edge = 0;
 		  p->type = SDF_ELEM_IOPATH;
 		  if (lex_sym (_l) == _tok_lpar) {
-		    /* edge specifier, ignored... */
+		    lex_getsym (_l);
+		    if (lex_sym (_l) == _posedge) {
+		      p->dirfrom = 1;
+		    }
+		    else if (lex_sym (_l) == _negedge) {
+		      p->dirfrom = 2;
+		    }
+		    else {
+		      p->clear();
+		      _errmsg ("IOPATH expected posedge or negedge");
+		      ERR_RET;
+		    }
+		    lex_getsym (_l);
+		    have_edge = 1;
+		  }
+		  p->from = _parse_hier_id ();
+		  if (!p->from) {
 		    p->clear();
+		    ERR_RET;
+		  }
+		  if (have_edge && lex_sym (_l) != _tok_rpar) {
+		    p->clear ();
+		    _errmsg ("IOPATH edge specifier error");
+		    ERR_RET;
+		  }
+		  else if (have_edge) {
+		    lex_getsym (_l);
+		  }
+		  p->to = _parse_hier_id ();
+		  if (!p->to) {
+		    p->clear ();
+		    ERR_RET;
+		  }
+		  lex_push_position (_l);
+		  if (lex_have (_l, _tok_lpar) && lex_have (_l, _RETAIN)) {
+		    lex_pop_position (_l);
 		    _skip_to_endpar();
 		  }
-		  else {
-		    p->from = _parse_hier_id ();
-		    if (!p->from) {
-		      p->clear();
-		      ERR_RET;
-		    }
-		    p->to = _parse_hier_id ();
-		    if (!p->to) {
-		      p->clear ();
-		      ERR_RET;
-		    }
-		    lex_push_position (_l);
-		    if (lex_have (_l, _tok_lpar) && lex_have (_l, _RETAIN)) {
-		      lex_pop_position (_l);
-		      _skip_to_endpar();
-		    }
-		    lex_set_position (_l);
-		    lex_pop_position (_l);
-		    if (!_read_delay (&p->d)) {
-		      p->clear ();
-		      ERR_RET;
-		    }
-		    A_INC (cur->_paths);
+		  lex_set_position (_l);
+		  lex_pop_position (_l);
+		  if (!_read_delay (&p->d)) {
+		    p->clear ();
+		    ERR_RET;
 		  }
+		  A_INC (cur->_paths);
 		}
 		else {
 		  p->clear();
@@ -523,7 +541,7 @@ bool SDF::_read_cell()
 		  }
 		}
 	      }
-	      else if (lex_have (_l, _PORT)) {
+	    else if (lex_have (_l, _PORT)) {
 		p->type = SDF_ELEM_PORT;
 		p->to = _parse_hier_id ();
 		if (!p->to) {

@@ -203,6 +203,8 @@ struct sdf_path {
 				///< netdelay
   unsigned int abs:1;		//<  1 for ABSOLUTE, 2 for INCREMENT
 
+  unsigned int dirfrom:2;	//< 0 = none, 1 = posedge, 2 = negedge
+
   
   sdf_cond_expr *e;		///< conditional expression, if any
   ActId *from;			///< source
@@ -223,7 +225,16 @@ struct sdf_path {
     }
     fprintf (fp, "(%s ", _names[type]);
     if (from) {
+      if (dirfrom == 1) {
+	fprintf (fp, "(posedge ");
+      }
+      else if (dirfrom == 2) {
+	fprintf (fp, "(negedge ");
+      }
       from->Print (fp, NULL, 0, delim);
+      if (dirfrom != 0) {
+	fprintf (fp, ")");
+      }
       fprintf (fp, " ");
     }
     if (to) {
@@ -242,6 +253,7 @@ struct sdf_path {
     e = NULL;
     from = NULL;
     to = NULL;
+    dirfrom = 0;
     d.init();
   }
   ~sdf_path() { clear (); }

@@ -41,6 +41,7 @@ const char *sdf_path::_names[] =
 SDF::SDF (bool mangled_ids)
 {
   _l = NULL;
+  _extended = false;
 #define TOKEN(a,b) a = -1;
 #include "sdf.def"
   _valid = false;
@@ -63,6 +64,7 @@ SDF::SDF (bool mangled_ids)
   _h.temp.typ = 25.0;
   _h.temp.worst = 25.0;
   _h.timescale = 1.0;
+  _h.energyscale = 1.0;
 
   _err_ctxt = NULL;
 
@@ -173,10 +175,16 @@ bool SDF::Read (FILE *fp)
 
   // DELAYFILE
   if (!_mustbe (_DELAYFILE)) {
-    _errmsg ("DELAYFILE");
-    goto error;
+    if (!_mustbe (_XDELAYFILE)) {
+      _errmsg ("DELAYFILE");
+      goto error;
+    }
+    _extended = true;
   }
-
+  else {
+    _extended = false;
+  }
+  
   // sdf header
   if (!_read_sdfheader ()) goto error;
 
@@ -341,6 +349,52 @@ bool SDF::_read_sdfheader ()
 	}
 	lex_getsym (_l);
       }
+      else if (_extended && lex_have (_l, _ENERGYSCALE)) {
+	int val;
+	lex_pop_position (_l);
+	if (strcmp (lex_tokenstring (_l), "1") == 0 ||
+	    strcmp (lex_tokenstring (_l), "1.0") == 0) {
+	  val = 1;
+	}
+	else if (strcmp (lex_tokenstring (_l), "10") == 0 ||
+		 strcmp (lex_tokenstring (_l), "10.0") == 0) {
+	  val = 10;
+	}
+	else if (strcmp (lex_tokenstring (_l), "100") == 0 ||
+		 strcmp (lex_tokenstring (_l), "100.0") == 0) {
+	  val = 100;
+	}
+	else {
+	  fprintf (stderr, "ENERGYSCALE specifier error!\n");
+	  return false;
+	}
+	lex_getsym (_l);
+	if (strcmp (lex_tokenstring (_l), "J") == 0) {
+	  _h.energyscale = val;
+	}
+	else if (strcmp (lex_tokenstring (_l), "mJ") == 0) {
+	  _h.energyscale = val*1e-3;
+	}
+	else if (strcmp (lex_tokenstring (_l), "uJ") == 0) {
+	  _h.energyscale = val*1e-6;
+	}
+	else if (strcmp (lex_tokenstring (_l), "nJ") == 0) {
+	  _h.energyscale = val*1e-9;
+	}
+	else if (strcmp (lex_tokenstring (_l), "pJ") == 0) {
+	  _h.energyscale = val*1e-12;
+	}
+	else if (strcmp (lex_tokenstring (_l), "fJ") == 0) {
+	  _h.energyscale = val*1e-15;
+	}
+	else if (strcmp (lex_tokenstring (_l), "aJ") == 0) {
+	  _h.energyscale = val*1e-18;
+	}
+	else {
+	  fprintf (stderr, "ENERGYSCALE specifier error!\n");
+	}
+	lex_getsym (_l);
+      }
       else {
 	lex_set_position (_l);
 	lex_pop_position (_l);
@@ -361,7 +415,7 @@ bool SDF::_read_sdfheader ()
   return true;
 }
 
-#define ERR_RET if (cur) cur->clear(); lex_set_position (_l); lex_pop_position (_l); return false
+#define ERR_RET if (cur) { cur->clear(); delete cur; } lex_set_position (_l); lex_pop_position (_l); return false
 
 bool SDF::_read_cell()
 {
@@ -385,12 +439,13 @@ bool SDF::_read_cell()
       _errmsg ("string");
       ERR_RET;
     }
-    A_NEW (_cells, struct sdf_cell);
-    new (&A_NEXT (_cells)) sdf_cell();
+    A_NEW (_cells, struct sdf_cellinfo);
+    A_NEXT (_cells).data = new sdf_cell;
+    A_NEXT (_cells).inst = NULL;
     A_NEXT (_cells).celltype = Strdup (lex_prev (_l) + 1);
     A_NEXT (_cells).celltype[strlen (A_NEXT(_cells).celltype)-1] = '\0';
 
-    cur = &A_NEXT(_cells);
+    cur = A_NEXT(_cells).data;
     
     if (!_mustbe (_tok_rpar)) {
       _errmsg (")");
@@ -418,8 +473,8 @@ bool SDF::_read_cell()
     }
     else {
       // parse hierarchical id
-      cur->inst = _parse_hier_id ();
-      if (!cur->inst) {
+      A_NEXT (_cells).inst = _parse_hier_id ();
+      if (!A_NEXT (_cells).inst) {
 	_errmsg ("path-to-inst");
 	ERR_RET;
       }
@@ -616,23 +671,26 @@ bool SDF::_read_cell()
 	  }
 	}
       }
+      else if (_extended && lex_have (_l, _LEAKAGE)) {
+	
+      }
+      else if (_extended && lex_have (_l, _ENERGY)) {
+
+      }
       else if (lex_have (_l, _TIMINGCHECK) || lex_have (_l, _TIMINGENV)
 	       || lex_have (_l, _LABEL)) {
 	_skip_to_endpar ();
       }
       else {
-	A_NEXT (_cells).clear();
 	_errmsg ("delay/timing checks");
 	ERR_RET;
       }
       if (!_mustbe (_tok_rpar)) {
-	A_NEXT (_cells).clear();
 	ERR_RET;
       }
     }
 
     if (lex_eof (_l)) {
-      A_NEXT (_cells).clear();
       ERR_RET;
     }
     else {
@@ -649,7 +707,12 @@ bool SDF::_read_cell()
 void SDF::Print (FILE *fp)
 {
   fprintf (fp, "// Status: %s\n", _valid ? "valid" : "invalid");
-  fprintf (fp, "(DELAYFILE\n");
+  if (_extended) {
+    fprintf (fp, "(XDELAYFILE\n");
+  }
+  else {
+    fprintf (fp, "(DELAYFILE\n");
+  }
 #define EMIT_STRING(name,prefix)			\
   if (_h.prefix) {					\
     fprintf (fp, "  (%s \"%s\")\n", name, _h.prefix);	\
@@ -709,6 +772,44 @@ void SDF::Print (FILE *fp)
   }
   fprintf (fp, "%d %s)\n", ts, suffix);
 
+  if (_extended) {
+    fprintf (fp, "  (ENERGYSCALE ");
+    const char *suffix;
+    int ts;
+    if (_h.energyscale >= 1) {
+      suffix = "J";
+      ts = _h.energyscale;
+    }
+    else if (_h.energyscale >= 1e-3) {
+      suffix = "mJ";
+      ts = 1e3*_h.energyscale;
+    }
+    else if (_h.energyscale >= 1e-6) {
+      suffix = "uJ";
+      ts = 1e6*_h.energyscale;
+    }
+    else if (_h.energyscale >= 1e-9) {
+      suffix = "nJ";
+      ts = 1e9*_h.energyscale;
+    }
+    else if (_h.energyscale >= 1e-12) {
+      suffix = "pJ";
+      ts = 1e12*_h.energyscale;
+    }
+    else if (_h.energyscale >= 1e-15) {
+      suffix = "fJ";
+      ts = 1e15*_h.energyscale;
+    }
+    else if (_h.energyscale >= 1e-18) {
+      suffix = "aJ";
+      ts = 1e15*_h.energyscale;
+    }
+    else {
+      fatal_error ("Internal inconsistency!");
+    }
+    fprintf (fp, "%d %s)\n", ts, suffix);
+  }
+
   for (int i=0; i < A_LEN (_cells); i++) {
     fprintf (fp, "  (CELL\n");
     if (_cells[i].celltype) {
@@ -723,20 +824,20 @@ void SDF::Print (FILE *fp)
     }
     fprintf (fp, ")\n");
 
-    fprintf (fp, "  (DELAY\n");
+    fprintf (fp, "    (DELAY\n");
     int prev = -1;
-    for (int j=0; j < A_LEN (_cells[i]._paths); j++) {
-      sdf_path *p = &_cells[i]._paths[j];
+    for (int j=0; j < A_LEN (_cells[i].data->_paths); j++) {
+      sdf_path *p = &_cells[i].data->_paths[j];
       if (p->abs != prev) {
 	if (prev != -1) {
-	  fprintf (fp, "    )\n");
+	  fprintf (fp, "     )\n");
 	}
 	prev = p->abs;
 	if (prev) {
-	  fprintf (fp, "    (ABSOLUTE\n");
+	  fprintf (fp, "     (ABSOLUTE\n");
 	}
 	else {
-	  fprintf (fp, "    (INCREMENT\n");
+	  fprintf (fp, "     (INCREMENT\n");
 	}
       }
       fprintf (fp, "      ");
@@ -744,9 +845,37 @@ void SDF::Print (FILE *fp)
       fprintf (fp, "\n");
     }
     if (prev != -1) {
+      fprintf (fp, "     )\n");
+    }
+    fprintf (fp, "    )\n");
+
+    if (_extended) {
+      fprintf (fp, "    (ENERGY\n");
+      int prev = -1;
+      for (int j=0; j < A_LEN (_cells[i].data->_epaths); j++) {
+	sdf_path *p = &_cells[i].data->_epaths[j];
+	if (p->abs != prev) {
+	  if (prev != -1) {
+	    fprintf (fp, "     )\n");
+	  }
+	  prev = p->abs;
+	  if (prev) {
+	    fprintf (fp, "      (ABSOLUTE\n");
+	  }
+	  else {
+	    fprintf (fp, "      (INCREMENT\n");
+	  }
+	}
+	fprintf (fp, "      ");
+	p->Print (fp, _h.divider);
+	fprintf (fp, "\n");
+      }
+      if (prev != -1) {
+	fprintf (fp, "     )\n");
+      }
       fprintf (fp, "    )\n");
     }
-    fprintf (fp, "  )\n");
+    
     fprintf (fp, "  )\n");
   }
   

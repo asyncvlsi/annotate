@@ -28,12 +28,12 @@ void annotate_pass_init (ActPass *ap)
   ActDynamicPass *adp = dynamic_cast<ActDynamicPass *>(ap);
   Assert (adp, "Hmm..");
 
-  ActPass *nlp = a->pass_find ("prs2net");
+  ActPass *bp = a->pass_find ("booleanize");
 
-  if (!nlp) {
-    nlp = new ActNetlistPass (a);
+  if (!bp) {
+    bp = new ActBooleanizePass (a);
   }
-  adp->addDependency ("prs2net");
+  adp->addDependency ("booleanize");
 }
 
 /* Not defining this
@@ -49,8 +49,12 @@ void *annotate_pass_proc (ActPass *ap, Process *p, int mode)
 
   if (!p || !dp->getRoot()) {
     /* run on the top level global namespace */
-    printf ("SPEF pass must be run with a specified top-level process only.");
+    printf ("Annotation pass must be run with a specified top-level process only.");
     return NULL;
+  }
+
+  if (dp->getRoot() == p) {
+    /* the root process: read SPEF/SDF as specified */
   }
   
   if (!dp->hasParam ("spef")) {
@@ -96,8 +100,6 @@ void *annotate_pass_proc (ActPass *ap, Process *p, int mode)
     spf = (Spef *) dp->getPtrParam ("spef");
   }
   Assert (spf, "What?!");
-
-  
   return NULL;
 }
 

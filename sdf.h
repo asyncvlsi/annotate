@@ -272,36 +272,45 @@ struct sdf_path {
 };
 
 
+// we will have celltype + celltype [space] inst as the hash
+
 struct sdf_cell {
-  char *celltype;		///< This is the type name, but it can
-				///< also be a hierarchy path (!)
-  
-  ActId *inst;			///< NULL if this is *, otherwise it
-				///< is a hierarchy path
+  spef_triplet _leak;		///< leakage info, if any
   
   // delay record
   A_DECL (sdf_path, _paths);
 
+  // energy records
+  A_DECL (sdf_path, _epaths);
+
   sdf_cell() {
-    celltype = NULL;
-    inst = NULL;
     A_INIT (_paths);
+    A_INIT (_epaths);
   }
   ~sdf_cell() {
     clear();
   }
   void clear() {
-    if (celltype) FREE(celltype);
-    celltype = NULL;
-    if (inst) delete inst;
-    inst = NULL;
     for (int i=0; i < A_LEN (_paths); i++) {
       _paths[i].~sdf_path();
     }
     A_FREE (_paths);
+    for (int i=0; i < A_LEN (_epaths); i++) {
+      _epaths[i].~sdf_path();
+    }
+    A_FREE (_epaths);
   }
 };
 
+struct sdf_cellinfo {
+  char *celltype;		///< This is the type name, but it can
+				///< also be a hierarchy path (!)
+  
+  ActId *inst;			///< NULL if this is *, otherwise it
+				///< is a hierarchy path
+
+  sdf_cell *data;
+};
 
 
 class SDF {
@@ -332,7 +341,8 @@ class SDF {
 
  private:
   Act *_a;			///< ACT data structure, if any
-  
+
+  bool _extended;		///< Extended syntax with energy
 
   struct sdf_header {
     char *sdfversion;
@@ -346,10 +356,10 @@ class SDF {
     char *process;
     spef_triplet temp;
     double timescale;
+    double energyscale;
   } _h;
 
-  A_DECL (struct sdf_cell, _cells);
-
+  A_DECL (struct sdf_cellinfo, _cells);
 
   bool _valid;			///< true if a read succeeded and a
 				///< valid SDF file was read in
@@ -378,8 +388,6 @@ class SDF {
   
   const char *_err_ctxt;
   int _last_error_report_line, _last_error_report_col;
-
-  // actual delay records
 };
 
 

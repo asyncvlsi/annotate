@@ -207,6 +207,7 @@ struct spef_node {
   int idx;
 
   void Print (FILE *fp, char delim);
+  bool exists() { return pin ? true : false; }
 };
 
 

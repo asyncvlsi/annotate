@@ -2112,7 +2112,9 @@ void spef_parasitic::Print (FILE *fp, char delim)
   fprintf (fp, "%d ", id);
   n.Print (fp, delim);
   fprintf (fp, " ");
-  n2.Print (fp, delim);
-  fprintf (fp, " ");
+  if (n2.exists()) {
+    n2.Print (fp, delim);
+    fprintf (fp, " ");
+  }
   _print_triplet (fp, &val);
 }

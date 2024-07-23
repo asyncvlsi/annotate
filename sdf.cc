@@ -42,6 +42,8 @@ SDF::SDF (bool mangled_ids)
 {
   _l = NULL;
   _extended = false;
+  _perinst = false;
+  
 #define TOKEN(a,b) a = -1;
 #include "sdf.def"
   _valid = false;
@@ -478,6 +480,7 @@ bool SDF::_read_cell()
 	_errmsg ("path-to-inst");
 	ERR_RET;
       }
+      _perinst = true;
     }
 
     if (!_mustbe (_tok_rpar)) {
@@ -672,10 +675,18 @@ bool SDF::_read_cell()
 	}
       }
       else if (_extended && lex_have (_l, _LEAKAGE)) {
-	
+	// XXX: extended syntax
+	_skip_to_endpar ();
+	if (!_mustbe (_tok_rpar)) {
+	  ERR_RET;
+	}
       }
       else if (_extended && lex_have (_l, _ENERGY)) {
-
+	// XXX: extended syntax
+	_skip_to_endpar ();
+	if (!_mustbe (_tok_rpar)) {
+	  ERR_RET;
+	}
       }
       else if (lex_have (_l, _TIMINGCHECK) || lex_have (_l, _TIMINGENV)
 	       || lex_have (_l, _LABEL)) {

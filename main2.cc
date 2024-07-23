@@ -9,6 +9,9 @@ int main (void)
     printf ("Read error!\n");
   }
 
+  if (s->hasPerInst()) {
+    printf ("// has per-instance information\n");
+  }
   s->Print (stdout);
 
   delete s;

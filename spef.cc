@@ -904,7 +904,7 @@ bool Spef::_read_internal_def ()
 	  conn->inst = NULL;
 	  conn->pin = NULL;
 	  
-	  ActId *inst, *pin;
+	  ActId *inst = NULL, *pin = NULL;
 	  int dir;
 	  found = true;
 	  if (lex_have (_l, _star_p)) {
@@ -918,9 +918,8 @@ bool Spef::_read_internal_def ()
 	  }
 	  else if (lex_have (_l, _star_i)) {
 	    /* pin name or pnode ref */
-	    ActId *inst_name, *pin;
-	    if ((inst_name = _getIndex()) ||
-		(!phys && (inst_name = _getTokPath()))) {
+	    if ((inst = _getIndex()) ||
+		(!phys && (inst = _getTokPath()))) {
 	      /* pin delim */
 	      if (!lex_have (_l, _tok_pin_delim)) {
 		spef_warning (_l, "*I pin error");
@@ -1195,7 +1194,7 @@ bool Spef::_read_internal_def ()
 	  spef_rc_desc *rc;
 	  A_NEW (rnet->rc, spef_rc_desc);
 	  rc = &A_NEXT (rnet->rc);
-	  A_INIT (rnet->rc);
+	  A_INC (rnet->rc);
 	  rc->inst = NULL;
 	  rc->pin = NULL;
 
@@ -1719,6 +1718,25 @@ static void _print_triplet (FILE *fp, spef_triplet *t)
   }
 }
 
+static void _print_triplet_complex (FILE *fp, spef_triplet *re, spef_triplet *im)
+{
+  if (im->typ == 0 && im->worst == 0 && im->best == 0) {
+    _print_triplet (fp, re);
+  }
+  else {
+    if (im->typ == im->worst && im->typ == im->best &&
+	re->typ == re->worst && re->typ == re->best) {
+      fprintf (fp, "%g %g", re->typ, im->typ);
+    }
+    else {
+      fprintf (fp, "%g %g:%g %g:%g %g",
+	       re->best, im->best,
+	       re->typ, im->typ,
+	       re->worst, im->worst);
+    }
+  }
+}
+
 static void _print_attributes (FILE *fp, spef_attributes *a)
 {
   if (a->coord) {
@@ -1902,6 +1920,12 @@ void Spef::Print (FILE *fp)
       fprintf (fp, "\n");
     }
   }
+
+  if (A_LEN (_nets) > 0) {
+    for (int i=0; i < A_LEN (_nets); i++) {
+      _nets[i].Print (this, fp);
+    }
+  }
 }
 
 
@@ -1917,4 +1941,178 @@ bool SpefCollection::ReadExt (const char *name)
    * convert to SPEF data structure
    */
   return true;
+}
+
+
+void spef_net::Print (Spef *S, FILE *fp)
+{
+  if (type == 0) {
+    fprintf (fp, "*D_NET ");
+  }
+  else if (type == 1) {
+    fprintf (fp, "*R_NET ");
+  }
+  else if (type == 2) {
+    fprintf (fp, "*D_PNET ");
+  }
+  else {
+    fprintf (fp, "*R_PNET ");
+  }
+
+  char pin_delim = S->getPinDivider ();
+
+  // this is not the *<NUM> format!
+  MAP_GET_PTR(net)->Print (fp);
+  
+  fprintf (fp, " ");
+  _print_triplet (fp, &tot_cap);
+  if (routing_confidence != -1) {
+    fprintf (fp, " %d", routing_confidence);
+  }
+  fprintf (fp, "\n");
+
+  if (type == 1 || type == 3) {
+    for (int i=0; i < A_LEN (u.r.drivers); i++) {
+      spef_reduced *r = u.r.drivers + i;
+      fprintf (fp, "*DRIVER ");
+      if (r->driver_inst) {
+	MAP_GET_PTR(r->driver_inst)->Print (fp);
+	fprintf (fp, "%c", pin_delim);
+      }
+      MAP_GET_PTR(r->pin)->Print (fp);
+      fprintf (fp, "\n");
+      fprintf (fp, "*CELL ");
+      MAP_GET_PTR(r->cell_type)->Print (fp);
+      fprintf (fp, "\n");
+      fprintf (fp, "*C2_R1_C1 ");
+      _print_triplet (fp, &r->c2);
+      fprintf (fp, " ");
+      _print_triplet (fp, &r->r1);
+      fprintf (fp, " ");
+      _print_triplet (fp, &r->c1);
+      fprintf (fp, "\n*LOADS\n");
+      for (int j=0; j < A_LEN (r->rc); j++) {
+	fprintf (fp, "*RC ");
+	if (r->rc[j].inst) {
+	  MAP_GET_PTR(r->rc[j].inst)->Print (fp);
+	  fprintf (fp, "%c", pin_delim);
+	}
+	MAP_GET_PTR(r->rc[j].pin)->Print (fp);
+	fprintf (fp, " ");
+	_print_triplet (fp, &r->rc[j].val);
+	fprintf (fp, "\n");
+	if (r->rc[j].pole.idx != -1) {
+	  fprintf (fp, "*Q %d ", r->rc[j].pole.idx);
+	  _print_triplet_complex (fp, &r->rc[j].pole.re, &r->rc[j].pole.im);
+	  fprintf (fp, "\n");
+	}
+	if (r->rc[j].residue.idx != -1) {
+	  fprintf (fp, "*K %d ", r->rc[j].residue.idx);
+	  _print_triplet_complex (fp, &r->rc[j].residue.re, &r->rc[j].residue.im);
+	  fprintf (fp, "\n");
+	}
+      }
+    }
+    // R_NET
+    // driver_reduc
+  }
+  else {
+    // D_NET
+    //  conn_sec cap_sec res_sec induc_sec *END
+
+    if (A_LEN (u.d.conn) > 0) {
+      fprintf (fp, "*CONN\n");
+    }
+    for (int i=0; i < A_LEN (u.d.conn); i++) {
+      spef_conn *c = u.d.conn + i;
+      if (c->type == 0) {
+	fprintf (fp, "*P ");
+      }
+      else if (c->type == 1) {
+	fprintf (fp, "*I ");
+      }
+      else if (c->type == 2) {
+	fprintf( fp, "*N ");
+      }
+      else {
+	Assert (0, "Invalid conn type");
+      }
+      if (c->inst) {
+	MAP_GET_PTR(c->inst)->Print (fp);
+	fprintf (fp, "%c", pin_delim);
+	MAP_GET_PTR(c->pin)->Print (fp);
+      }
+      else {
+	MAP_GET_PTR(c->pin)->Print (fp);
+      }
+      if (c->type == 2) {
+	fprintf (fp, "%c%d %g %g\n", pin_delim, c->ipin, c->cx, c->cy);
+      }
+      else {
+	if (c->dir == 0) {
+	  fprintf (fp, " I");
+	}
+	else if (c->dir == 1) {
+	  fprintf (fp, " O");
+	}
+	else {
+	  Assert (c->dir == 2, "What?");
+	  fprintf (fp, " B");
+	}
+	if (c->a) {
+	  _print_attributes (fp, c->a);
+	}
+      }
+      fprintf (fp, "\n");
+    }
+
+    if (A_LEN (u.d.caps) > 0) {
+      fprintf (fp, "*CAP\n");
+      for (int i=0; i < A_LEN (u.d.caps); i++) {
+	u.d.caps[i].Print (fp, pin_delim);
+	fprintf (fp, "\n");
+      }
+    }
+    if (A_LEN (u.d.res) > 0) {
+      fprintf (fp, "*RES\n");
+      for (int i=0; i < A_LEN (u.d.res); i++) {
+	u.d.res[i].Print (fp, pin_delim);
+	fprintf (fp, "\n");
+      }
+    }
+    if (A_LEN (u.d.induc) > 0) {
+      fprintf (fp, "*INDUC\n");
+      for (int i=0; i < A_LEN (u.d.induc); i++) {
+	u.d.induc[i].Print (fp, pin_delim);
+	fprintf (fp, "\n");
+      }
+    }
+  }
+  fprintf (fp, "*END\n");
+}
+
+
+void spef_node::Print (FILE *fp, char delim)
+{
+  if (inst) {
+    MAP_GET_PTR (inst)->Print (fp);
+    fprintf (fp, "%c", delim);
+    MAP_GET_PTR (pin)->Print (fp);
+  }
+  else {
+    MAP_GET_PTR (pin)->Print (fp);
+  }
+  if (idx != -1) {
+    fprintf (fp, "%c%d", delim, idx);
+  }
+}
+
+void spef_parasitic::Print (FILE *fp, char delim)
+{
+  fprintf (fp, "%d ", id);
+  n.Print (fp, delim);
+  fprintf (fp, " ");
+  n2.Print (fp, delim);
+  fprintf (fp, " ");
+  _print_triplet (fp, &val);
 }

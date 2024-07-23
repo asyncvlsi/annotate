@@ -338,11 +338,17 @@ class SDF {
    */
   void Print (FILE *fp);
   
+  /**
+   * @return true if the SDF file has per-instance delay/energy
+   * information, false otherwise.
+   */
+  bool hasPerInst() { return _perinst; }
 
  private:
   Act *_a;			///< ACT data structure, if any
 
-  bool _extended;		///< Extended syntax with energy
+  bool _extended;		///< Extended syntax with energy metrics
+  bool _perinst;		///< true if per-instance specs exist
 
   struct sdf_header {
     char *sdfversion;

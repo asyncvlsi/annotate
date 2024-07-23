@@ -153,9 +153,24 @@ void *annotate_pass_proc (ActPass *ap, Process *p, int mode)
   }
 
   if (dp->getRoot() == p) {
-    if (!load_spef (dp) && !load_sdf (dp)) {
-      warning ("Annotation pass requires either SPEF or SDF file!");
-      return NULL;
+    /* load in SPEF and/or SDF files for the top-level process */
+    unsigned int flags;
+
+    if (dp->hasParam ("annotate")) {
+      flags = dp->getIntParam ("annotate");
+    }
+    else {
+      flags = 0;
+    }
+    if (flags & 1) {
+      if (!load_spef (dp)) {
+	warning ("Annotation pass: SPEF reading failed!");
+      }
+    }
+    if (flags & 2) {
+      if (!load_sdf (dp)) {
+	warning ("Annotation pass: SDF reading failed!");
+      }
     }
   }
   spf = (Spef *) dp->getPtrParam ("spef");
@@ -164,8 +179,10 @@ void *annotate_pass_proc (ActPass *ap, Process *p, int mode)
     return NULL;
   }
 
-  /* do something here! */
-  
+  /* For SPEF files, we need to organize everything by hierarchy!
+     --> resistance should be consistent per cell
+     --> cap should be broken down into local + residual
+  */
 
   return NULL;
 }

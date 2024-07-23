@@ -205,6 +205,8 @@ struct spef_node {
 
   /// optional integer for internal nodes (-1 if omitted)
   int idx;
+
+  void Print (FILE *fp, char delim);
 };
 
 
@@ -228,6 +230,9 @@ struct spef_parasitic {
   spef_triplet val;
   
   /* XXX: sensitivity: use with variations */
+
+  void Print (FILE *fp, char delim);
+  
 };
 
 
@@ -316,7 +321,7 @@ struct spef_reduced_net {
   A_DECL (spef_reduced, drivers);
 };
 
-  
+
 /**
  * A SPEF net with parasitic information
  */
@@ -331,7 +336,7 @@ struct spef_net {
   int routing_confidence;
 
   /// 0 = D_NET, 1 = R_NET, 2 = D_PNET, 3 = R_PNET
-  int type;
+  unsigned int type:2;
   
   union {
     /// if this is a detailed net, the information is here
@@ -340,6 +345,9 @@ struct spef_net {
     /// if this is a reduced net spec, the information is here
     spef_reduced_net r;
   } u /** the parasitic information */;
+
+
+  void Print (Spef *S, FILE *fp);
 };
 
 class SpefCollection;
@@ -386,6 +394,9 @@ class Spef {
    * @return true if successful, false otherwise
    */
   static bool getParasitics (LEX_T *l, int colon, spef_triplet *t);
+
+
+  char getPinDivider () { return _delimiter; }
 
 private:
   /** The lexical analysis engine. This is non-NULL during the parsing

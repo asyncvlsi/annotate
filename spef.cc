@@ -1261,6 +1261,18 @@ bool Spef::_read_internal_def ()
   return found;
 }
 
+static int _valid_escaped_chars (char c)
+{
+  if (c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' ||
+      c == '(' || c == ')' || c == '*' || c == '+' || c == ',' || c == '-' ||
+      c == '+' || c == ',' || c == '-' || c == '.' || c == '/' || c == ':' ||
+      c == ';' || c == '<' || c == '=' || c == '>' || c == '?' || c == '@' ||
+      c == '[' || c == '\\' || c == ']' ||c == '^' || c == '`' || c == '{' ||
+      c == '}' || c == '~' || c == '"') {
+    return 1;
+  }
+  return 0;
+}
 
 static int _valid_id_chars (char *s)
 {
@@ -1269,18 +1281,7 @@ static int _valid_id_chars (char *s)
 	((*s) >= '0' && (*s) <= '9') ||	((*s) == '_')) {
       s++;
     }
-    else if ((*s) == '\\' &&
-	     (*(s+1) == '!' || *(s+1) == '#' || *(s+1) == '$' ||
-	      *(s+1) == '%' || *(s+1) == '&' || *(s+1) == '\'' ||
-	      *(s+1) == '(' || *(s+1) == ')' || *(s+1) == '*' ||
-	      *(s+1) == '+' || *(s+1) == ',' || *(s+1) == '-' ||
-	      *(s+1) == '+' || *(s+1) == ',' || *(s+1) == '-' ||
-	      *(s+1) == '.' || *(s+1) == '/' || *(s+1) == ':' ||
-	      *(s+1) == ';' || *(s+1) == '<' || *(s+1) == '=' ||
-	      *(s+1) == '>' || *(s+1) == '?' || *(s+1) == '@' ||
-	      *(s+1) == '[' || *(s+1) == '\\' || *(s+1) == ']' ||
-	      *(s+1) == '^' || *(s+1) == '`' || *(s+1) == '{' ||
-	      *(s+1) == '}' || *(s+1) == '~' || *(s+1) == '"')) {
+    else if ((*s) == '\\' && _valid_escaped_chars (*(s+1))) {
       s += 2;
     }
     else {
@@ -1290,6 +1291,8 @@ static int _valid_id_chars (char *s)
   return 1;
 }
 
+
+#define _valid_bus_chars(c) (*(c) == _bus_prefix_delim || *(c) == _bus_suffix_delim)
 /*
   Returns a SPEF identifier string from the token stream,
   or NULL if there isn't any
@@ -1304,8 +1307,11 @@ char *Spef::_getTokId()
   curbuf[0] = '\0';
   buflen = 0;
 
+  int off = 0;
+
   /* next token is ID */
-  while (_valid_id_chars (lex_tokenstring (_l))) {
+  while (_valid_id_chars (lex_tokenstring (_l) + off) ||
+	 _valid_bus_chars (lex_tokenstring (_l) + off)) {
     while (strlen (lex_tokenstring (_l)) + buflen + 1 > bufsz) {
       bufsz *= 2;
       REALLOC (curbuf, char, bufsz);
@@ -1313,8 +1319,34 @@ char *Spef::_getTokId()
     snprintf (curbuf + buflen, bufsz - buflen, "%s", lex_tokenstring (_l));
     buflen += strlen (curbuf + buflen);
     lex_getsym (_l);
-    if (strcmp (lex_whitespace (_l), "") > 0) {
+    if (strcmp (lex_whitespace (_l), "") != 0) {
       break;
+    }
+    while (strcmp (lex_tokenstring (_l), "\\") == 0) {
+      lex_getsym (_l);
+      if (strcmp (lex_whitespace (_l), "") != 0) {
+	FREE (curbuf);
+	return NULL;
+      }
+      if (!_valid_escaped_chars (lex_tokenstring (_l)[0])) {
+	FREE (curbuf);
+	return NULL;
+      }
+      if (buflen + 2 > bufsz) {
+	bufsz *= 2;
+	REALLOC (curbuf, char, bufsz);
+      }
+      // stuff the escaped character
+      snprintf (curbuf + buflen, bufsz - buflen, "%c", lex_tokenstring(_l)[0]);
+      buflen++;
+      if (lex_tokenstring(_l)[1]) {
+	off = 1;
+	break;
+      }
+      else {
+	off = 0;
+	lex_getsym (_l);
+      }
     }
   }
   if (buflen == 0) {

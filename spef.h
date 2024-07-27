@@ -424,6 +424,8 @@ private:
   
   ActId *_getIndex();	    // return ID from index, if it is an index
 
+  ActId *_strToId (char *s);	// convert string to ActId segment
+
   // return true on success, false otherwise
   // isphy = true for physical ports, false otherwise
   // returns inst name and port name

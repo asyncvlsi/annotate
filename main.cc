@@ -2,9 +2,9 @@
 #include "spef.h"
 
 
-int main (void)
+int main (int argc, char **argv)
 {
-  Spef *s = new Spef();
+  Spef *s = new Spef(argc > 1 ? true : false);
   if (!s->Read (stdin)) {
     printf ("Read error!\n");
   }

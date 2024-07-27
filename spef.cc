@@ -534,6 +534,11 @@ bool Spef::_read_name_map ()
       spef_warning (_l, "error parsing name");
       return false;
     }
+#if 0
+    printf (">> %d maps to ", (int)b->key);
+    MAP_GET_PTR(b->v)->Print (stdout);
+    printf ("\n");
+#endif
   }
   return true;
 }
@@ -592,7 +597,7 @@ bool Spef::_getPinPortInternal (spef_node *n)
     }
     else {
       tmp2 = MAP_GET_PTR (tmp);
-      if (tmp2->Rest()) {
+      if (tmp2->Rest() && !_a) {
 	lex_set_position (_l);
 	lex_pop_position (_l);
 	spef_warning (_l, "port name error");
@@ -632,7 +637,6 @@ bool Spef::_getPortName (bool isphy, ActId **inst_name, ActId **port)
       if (!tmp2) {
 	lex_set_position (_l);
 	lex_pop_position (_l);
-	spef_warning (_l, "port name error");
 	return false;
       }
 
@@ -644,10 +648,10 @@ bool Spef::_getPortName (bool isphy, ActId **inst_name, ActId **port)
     }
     else {
       tmp2 = MAP_GET_PTR (tmp);
-      if (tmp2->Rest()) {
+      if (tmp2->Rest() && !_a) {
 	lex_set_position (_l);
 	lex_pop_position (_l);
-	spef_warning (_l, "port name error");
+	spef_warning (_l, "port name error3");
 	return false;
       }
       *inst_name = NULL;
@@ -963,7 +967,7 @@ bool Spef::_read_internal_def ()
 	      return false;
 	    }
 	    Assert (pin, "Hmm?");
-	    if (MAP_GET_PTR(pin)->Rest()) {
+	    if (MAP_GET_PTR(pin)->Rest() && !_a) {
 	      spef_warning (_l, "pin error");
 	      return false;
 	    }
@@ -1068,7 +1072,6 @@ bool Spef::_read_internal_def ()
 	  spef_parasitic *sc;
 	  A_NEW (net->u.d.res, spef_parasitic);
 	  sc = &A_NEXT (net->u.d.res);
-	  A_INC (net->u.d.res);
 	  sc->n.inst = NULL;
 	  sc->n.pin = NULL;
 	  sc->n2.inst = NULL;
@@ -1090,6 +1093,7 @@ bool Spef::_read_internal_def ()
 	    spef_warning (_l, "error in parasitics");
 	    return false;
 	  }
+	  A_INC (net->u.d.res);
 	  SKIP_SC_OPTIONAL;
 	}
       }
@@ -1360,6 +1364,55 @@ char *Spef::_getTokId()
   }
 }
 
+static bool _has_dot (const char *s)
+{
+  while (*s) {
+    if (*s == '.') return 1;
+    s++;
+  }
+  return 0;
+}
+
+
+ActId *Spef::_strToId (char *s)
+{
+  ActId *ret;
+  
+  if (_a) {
+    char *tmpbuf;
+    int len = strlen (s) + 1;
+    MALLOC (tmpbuf, char, len);
+    if (_has_dot (s)) {
+      snprintf (tmpbuf, len, "%s", s);
+    }
+    else {
+      _a->unmangle_string (s, tmpbuf, len);
+    }
+#if 0
+    fprintf (stderr, " ==> orig: %s\n", s);
+    fprintf (stderr, "   -> new: %s\n", tmpbuf);
+#endif
+    ret = ActId::parseId (tmpbuf, '.', '[', ']', '.');
+    FREE (tmpbuf);
+#if 0
+    if (!ret) {
+      fprintf (stderr, "   -> err!\n\n");
+      return NULL;
+    }
+    else {
+      fprintf (stderr, "   -> ret: ");
+      ret->Print (stderr);
+      fprintf (stderr, "\n\n");
+    }
+#endif
+  }
+  else {
+    ret = new ActId (string_cache (s));
+  }
+  return ret;
+}
+
+
 ActId *Spef::_getTokName()
 {
   ActId *tmp;
@@ -1373,7 +1426,7 @@ ActId *Spef::_getTokName()
   if (!s) {
     return NULL;
   }
-  tmp = new ActId (s);
+  tmp = _strToId (s);
   FREE (s);
   return tmp;
 }
@@ -1396,12 +1449,12 @@ ActId *Spef::_getTokPhysicalRef ()
     Assert (part, "Hmm");
 
     if (!ret) {
-      ret = new ActId (part);
-      tmp = ret;
+      ret = _strToId (part);
+      tmp = ret->Tail();
     }
     else {
-      tmp->Append (new ActId (part));
-      tmp = tmp->Rest();
+      tmp->Append (_strToId (part));
+      tmp = tmp->Tail();
     }
     FREE (part);
     if (!lex_have (_l, _tok_hier_delim)) {
@@ -1439,22 +1492,19 @@ ActId *Spef::_getTokPath ()
   }
 
   if (_a) {
-    char *tmpbuf;
-    if (lex_sym (_l) != l_id) {
+    if (lex_sym (_l) != l_id && lex_sym (_l) != l_integer) {
       lex_set_position (_l);
       lex_pop_position (_l);
       return NULL;
     }
-    MALLOC (tmpbuf, char, strlen (lex_tokenstring (_l))+ 1);
-    _a->unmangle_string (lex_tokenstring (_l), tmpbuf,
-			 strlen (lex_tokenstring (_l)) + 1);
-    ret = ActId::parseId (tmpbuf, '.', '[', ']', '.');
-    FREE (tmpbuf);
+    ret = _strToId (lex_tokenstring (_l));
+
     if (!ret) {
       lex_set_position (_l);
       lex_pop_position (_l);
       return NULL;
     }
+    lex_getsym (_l);
   }
   else {
     /* normal SPEF */

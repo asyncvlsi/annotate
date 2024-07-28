@@ -606,10 +606,11 @@ bool Spef::_getPinPortInternal (spef_node *n)
       n->inst = NULL;
       n->pin = tmp;
     }
-    n->idx = -1;
     if (_tok_pin_delim != -1 && lex_have (_l, _tok_pin_delim)) {
       if (lex_sym (_l) == l_integer) {
-	n->idx = lex_integer (_l);
+	Assert (n->inst == NULL, "What?");
+	n->inst = n->pin;
+	n->pin = new ActId (lex_tokenstring (_l));
 	lex_getsym (_l);
       }
     }
@@ -2183,9 +2184,6 @@ void spef_node::Print (FILE *fp, char delim)
   }
   else {
     MAP_GET_PTR (pin)->Print (fp);
-  }
-  if (idx != -1) {
-    fprintf (fp, "%c%d", delim, idx);
   }
 }
 

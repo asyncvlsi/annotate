@@ -70,7 +70,8 @@ SDF::SDF (bool mangled_ids)
 
   _err_ctxt = NULL;
 
-  A_INIT (_cells);
+  _cellH = hash_new (4);
+  //A_INIT (_cells);
 
   if (mangled_ids) {
     _a = ActNamespace::Act();
@@ -108,7 +109,28 @@ SDF::~SDF()
   if (_h.process) {
     FREE (_h.process);
   }
-  
+
+  hash_bucket_t *b;
+  hash_iter_t it;
+  hash_iter_init (_cellH, &it);
+  while ((b = hash_iter_next (_cellH, &it))) {
+    struct sdf_celltype *ct = (struct sdf_celltype *) b->v;
+    if (ct->all) {
+      delete ct->all;
+    }
+    if (ct->inst) {
+      chash_bucket_t *cb;
+      chash_iter_t cit;
+      chash_iter_init (ct->inst, &cit);
+      while ((cb = chash_iter_next (ct->inst, &cit))) {
+	sdf_cell *c = (sdf_cell *) cb->v;
+	delete c;
+      }
+      chash_free (ct->inst);
+    }
+    FREE (ct);
+  }
+  hash_free (_cellH);
 }
 
 bool SDF::Read (const char *name)
@@ -417,11 +439,47 @@ bool SDF::_read_sdfheader ()
   return true;
 }
 
+
+// custom hash functions
+static int idhash (int sz, void *key)
+{
+  ActId *id = (ActId *) key;
+  return id->getHash (0, sz);
+}
+
+static int idmatch (void *k1, void *k2)
+{
+  ActId *id1 = (ActId *) k1;
+  ActId *id2 = (ActId *) k2;
+  return id1->isEqual (id2);
+}
+
+static void *iddup (void *k)
+{
+  ActId *id = (ActId *)k;
+  // don't clone. 
+  return k;
+}
+
+static void idfree (void *k)
+{
+  ActId *id = (ActId *) k;
+  delete id;
+}
+
+static void idprint (FILE *fp, void *k)
+{
+  // nothing
+}
+
+
 #define ERR_RET if (cur) { cur->clear(); delete cur; } lex_set_position (_l); lex_pop_position (_l); return false
 
 bool SDF::_read_cell()
 {
   sdf_cell *cur = NULL;
+  struct sdf_celltype *ct = NULL;
+  ActId *instinfo = NULL;
   lex_push_position (_l);
 
   if (lex_have (_l, _tok_lpar)) {
@@ -441,14 +499,27 @@ bool SDF::_read_cell()
       _errmsg ("string");
       ERR_RET;
     }
-    A_NEW (_cells, struct sdf_cellinfo);
-    A_NEXT (_cells).data = new sdf_cell;
-    A_NEXT (_cells).inst = NULL;
-    A_NEXT (_cells).celltype = Strdup (lex_prev (_l) + 1);
-    A_NEXT (_cells).celltype[strlen (A_NEXT(_cells).celltype)-1] = '\0';
+    // get sdf_celltype
+    {
+      hash_bucket_t *b;
+      char *celltype = Strdup (lex_prev (_l)+1);
+      celltype[strlen(celltype)-1] = '\0';
+      b = hash_lookup (_cellH, celltype);
+      if (!b) {
+	b = hash_add (_cellH, celltype);
+	NEW (ct, struct sdf_celltype);
+	ct->all = NULL;
+	ct->inst = NULL;
+	b->v = ct;
+      }
+      FREE (celltype);
+      ct = (struct sdf_celltype *) b->v;
+    }
 
-    cur = A_NEXT(_cells).data;
-    
+    // allocate cell delay information
+    cur = new sdf_cell;
+    instinfo = NULL;
+
     if (!_mustbe (_tok_rpar)) {
       _errmsg (")");
       ERR_RET;
@@ -475,8 +546,8 @@ bool SDF::_read_cell()
     }
     else {
       // parse hierarchical id
-      A_NEXT (_cells).inst = _parse_hier_id ();
-      if (!A_NEXT (_cells).inst) {
+      instinfo = _parse_hier_id ();
+      if (!instinfo) {
 	_errmsg ("path-to-inst");
 	ERR_RET;
       }
@@ -705,7 +776,35 @@ bool SDF::_read_cell()
       ERR_RET;
     }
     else {
-      A_INC (_cells);
+      // ok now take this sdf_cell and put in into the hash table!
+      if (instinfo) {
+	if (!ct->inst) {
+	  ct->inst = chash_new (4);
+	  ct->inst->hash = idhash;
+	  ct->inst->match = idmatch;
+	  ct->inst->dup = iddup;
+	  ct->inst->free = idfree;
+	  ct->inst->print = idprint;
+	}
+	chash_bucket_t *cb = chash_lookup (ct->inst, instinfo);
+	if (!cb) {
+	  cb = chash_add (ct->inst, instinfo);
+	  cb->v = cur;
+	}
+	else {
+	  warning ("Skipping inst-duplicates for now. FIX!");
+	  delete cur;
+	}
+      }
+      else {
+	if (!ct->all) {
+	  ct->all = cur;
+	}
+	else {
+	  warning ("Skipping *-duplicates for now. FIX!");
+	  delete cur;
+	}
+      }
       lex_pop_position (_l);
       return true;
     }
@@ -821,75 +920,33 @@ void SDF::Print (FILE *fp)
     fprintf (fp, "%d %s)\n", ts, suffix);
   }
 
-  for (int i=0; i < A_LEN (_cells); i++) {
-    fprintf (fp, "  (CELL\n");
-    if (_cells[i].celltype) {
-      fprintf (fp, "    (CELLTYPE \"%s\")\n", _cells[i].celltype);
+  hash_bucket_t *b;
+  hash_iter_t it;
+  hash_iter_init (_cellH, &it);
+  while ((b = hash_iter_next (_cellH, &it))) {
+    struct sdf_celltype *ct = (struct sdf_celltype *) b->v;
+    if (ct->all) {
+      fprintf (fp, "  (CELL\n");
+      fprintf (fp, "    (CELLTYPE \"%s\")\n", b->key);
+      fprintf (fp, "    (INSTANCE *)\n");
+      ct->all->Print (fp, "    ", _h.divider);
     }
-    fprintf (fp, "    (INSTANCE ");
-    if (_cells[i].inst) {
-      _cells[i].inst->Print (fp, NULL, 0, _h.divider);
-    }
-    else {
-      fprintf (fp, "*");
-    }
-    fprintf (fp, ")\n");
-
-    fprintf (fp, "    (DELAY\n");
-    int prev = -1;
-    for (int j=0; j < A_LEN (_cells[i].data->_paths); j++) {
-      sdf_path *p = &_cells[i].data->_paths[j];
-      if (p->abs != prev) {
-	if (prev != -1) {
-	  fprintf (fp, "     )\n");
-	}
-	prev = p->abs;
-	if (prev) {
-	  fprintf (fp, "     (ABSOLUTE\n");
-	}
-	else {
-	  fprintf (fp, "     (INCREMENT\n");
-	}
+    if (ct->inst) {
+      chash_bucket_t *cb;
+      chash_iter_t cit;
+      chash_iter_init (ct->inst, &cit);
+      while ((cb = chash_iter_next (ct->inst, &cit))) {
+	sdf_cell *c = (sdf_cell *) cb->v;
+	ActId *inst = (ActId *) cb->key;
+	fprintf (fp, "  (CELL\n");
+	fprintf (fp, "    (CELLTYPE \"%s\")\n", b->key);
+	fprintf (fp, "    (INSTANCE ");
+	inst->Print (fp, NULL, 0, _h.divider);
+	fprintf (fp, ")\n");
+	c->Print (fp, "    ", _h.divider);
       }
-      fprintf (fp, "      ");
-      p->Print (fp, _h.divider);
-      fprintf (fp, "\n");
     }
-    if (prev != -1) {
-      fprintf (fp, "     )\n");
-    }
-    fprintf (fp, "    )\n");
-
-    if (_extended) {
-      fprintf (fp, "    (ENERGY\n");
-      int prev = -1;
-      for (int j=0; j < A_LEN (_cells[i].data->_epaths); j++) {
-	sdf_path *p = &_cells[i].data->_epaths[j];
-	if (p->abs != prev) {
-	  if (prev != -1) {
-	    fprintf (fp, "     )\n");
-	  }
-	  prev = p->abs;
-	  if (prev) {
-	    fprintf (fp, "      (ABSOLUTE\n");
-	  }
-	  else {
-	    fprintf (fp, "      (INCREMENT\n");
-	  }
-	}
-	fprintf (fp, "      ");
-	p->Print (fp, _h.divider);
-	fprintf (fp, "\n");
-      }
-      if (prev != -1) {
-	fprintf (fp, "     )\n");
-      }
-      fprintf (fp, "    )\n");
-    }
-    
-    fprintf (fp, "  )\n");
   }
-  
   fprintf (fp, ")\n");
   return;
 }
@@ -1160,3 +1217,58 @@ sdf_cond_expr *SDF::name ()				\
 /* | */ ASSOC_OPERATOR(_parse_expr_4, _parse_expr_3, SDF_OR, _tok_or)
 /* && */ ASSOC_OPERATOR(_parse_expr_5, _parse_expr_4, SDF_AND, _tok_andand)
 /* || */ ASSOC_OPERATOR(_parse_expr, _parse_expr_5, SDF_OR, _tok_oror)
+
+
+void sdf_cell::Print (FILE *fp, const char *ts, char divider)
+{
+  fprintf (fp, "%s(DELAY\n", ts);
+  int prev = -1;
+  for (int j=0; j < A_LEN (_paths); j++) {
+    sdf_path *p = &_paths[j];
+    if (p->abs != prev) {
+      if (prev != -1) {
+	fprintf (fp, "%s)\n", ts);
+      }
+      prev = p->abs;
+      if (prev) {
+	fprintf (fp, "%s (ABSOLUTE\n", ts);
+      }
+      else {
+	fprintf (fp, "%s (INCREMENT\n", ts);
+      }
+    }
+    fprintf (fp, "%s  ", ts);
+    p->Print (fp, divider);
+    fprintf (fp, "\n");
+  }
+  if (prev != -1) {
+    fprintf (fp, "%s )\n", ts);
+  }
+
+  if (A_LEN (_epaths) > 0) {
+    fprintf (fp, "%s(ENERGY\n", ts);
+    prev = -1;
+    for (int j=0; j < A_LEN (_epaths); j++) {
+      sdf_path *p = &_epaths[j];
+      if (p->abs != prev) {
+	if (prev != -1) {
+	  fprintf (fp, "%s)\n", ts);
+	}
+	prev = p->abs;
+	if (prev) {
+	  fprintf (fp, "%s (ABSOLUTE\n", ts);
+	}
+	else {
+	  fprintf (fp, "%s (INCREMENT\n", ts);
+	}
+      }
+      fprintf (fp, "%s  ", ts);
+      p->Print (fp, divider);
+      fprintf (fp, "\n");
+    }
+    if (prev != -1) {
+      fprintf (fp, "%s )\n", ts);
+    }
+  }
+  fprintf (fp, "%s)\n", ts);
+}  

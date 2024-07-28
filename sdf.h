@@ -290,6 +290,7 @@ struct sdf_cell {
   ~sdf_cell() {
     clear();
   }
+  void Print (FILE *fp, const char *ts, char divider);
   void clear() {
     for (int i=0; i < A_LEN (_paths); i++) {
       _paths[i].~sdf_path();
@@ -302,16 +303,20 @@ struct sdf_cell {
   }
 };
 
-struct sdf_cellinfo {
-  char *celltype;		///< This is the type name, but it can
-				///< also be a hierarchy path (!)
-  
-  ActId *inst;			///< NULL if this is *, otherwise it
-				///< is a hierarchy path
 
-  sdf_cell *data;
-};
+/*
+  This is the hash bucket used for the cell type hash table that holds
+  the delay information.
+*/
+struct sdf_celltype {
+  sdf_cell *all;	        ///< Cell delay information provided
+				///for all cell instances of this
+				///type. NULL if not provided.
 
+  struct cHashtable *inst;	///< Hash from ActId (instance) to
+				///instance-specific cell delay. NULL
+				///if none are present.
+};  
 
 class SDF {
  public:
@@ -365,7 +370,7 @@ class SDF {
     double energyscale;
   } _h;
 
-  A_DECL (struct sdf_cellinfo, _cells);
+  struct Hashtable *_cellH;	///< hash from cell string to sdf_celltype
 
   bool _valid;			///< true if a read succeeded and a
 				///< valid SDF file was read in

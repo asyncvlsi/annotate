@@ -203,9 +203,6 @@ struct spef_node {
   /// pin name
   ActId *pin;			// or pin
 
-  /// optional integer for internal nodes (-1 if omitted)
-  int idx;
-
   void Print (FILE *fp, char delim);
   bool exists() { return pin ? true : false; }
 };

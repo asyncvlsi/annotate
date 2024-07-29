@@ -22,6 +22,7 @@ EXE=test_spef.$(EXT)
 EXE2=test_sdf.$(EXT)
 LIB1=libactannotate_$(EXT).a
 LIB2=annotate_pass_$(EXT).so
+LIB3=libactannotate_sh_$(EXT).so
 LIB=$(LIB1) $(LIB2)
 TARGETS=$(EXE) $(EXE2)
 TARGETLIBS=$(LIB)
@@ -34,7 +35,8 @@ MAIN=main.o
 MAIN2=main2.o
 
 OBJS=$(MAIN) $(LIBOBJ) $(MAIN2)
-SHOBJS=annotate_pass.os spef.os sdf.os
+SHOBJS3=spef.os sdf.os
+SHOBJS=annotate_pass.os $(SHOBJS3)
 
 SRCS=$(OBJS:.o=.cc) $(SHOBJS:.os=.cc)
 
@@ -52,6 +54,10 @@ $(LIB1): $(LIBOBJ)
 
 $(LIB2): $(SHOBJS)
 	$(ACT_HOME)/scripts/linkso $(LIB2) $(SHOBJS) $(SHLIBACTPASS)
+
+$(LIB3): $(SHOBJS3)
+	$(ACT_HOME)/scripts/linkso $(LIB3) $(SHOBJS3) $(SHLIBACTPASS)
+
 
 doc:
 	if [ ! -f Doxyfile ]; then doxygen -g; fi

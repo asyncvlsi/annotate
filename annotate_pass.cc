@@ -38,101 +38,51 @@ void annotate_pass_init (ActPass *ap)
 }
 
 
-static bool load_spef (ActDynamicPass *dp)
+static Spef *load_spef (Process *p)
 {
   Spef *spf;
-  
-  if (!dp->hasParam ("spef")) {
-    char buf[1024];
-    char *ns = NULL;
-    Process *root = dp->getRoot();
-    FILE *fp;
+  char buf[1024];
+  char buf2[1024];
+  char *ns = NULL;
+  FILE *fp;
     
-    Assert(root, "What?");
-    if (root->getns() && root->getns() != ActNamespace::Global()) {
-      ns = root->getns()->Name();
-    }
-    if (ns) {
-      snprintf (buf, 1024, "%s::%s.spef", ns, root->getName());
-    }
-    else {
-      snprintf (buf, 1024, "%s.spef", root->getName());
-    }
-    if (ns) {
-      FREE (ns);
-    }
-    spf = new Spef (true);
-    if (config_exists (buf)) {
-      fp = fopen (config_get_string (buf), "r");
-      if (!fp) {
-	warning ("Could not open SPEF file `%s' for reading",
-		 config_get_string (buf));
-	delete spf;
-	return false;
-      }
-    }
-    else {
-      fp = fopen (buf, "r");
-      if (!fp) {
-	delete spf;
-	return false;
-      }
-    }
-    spf->Read (fp);
-    fclose (fp);
-    dp->setParam ("spef", spf);
+  Assert(p, "What?");
+  if (p->getns() && p->getns() != ActNamespace::Global()) {
+    ns = p->getns()->Name();
   }
-  return true;
+  if (ns) {
+    snprintf (buf, 1024, "spef.%s::%s", ns, p->getName());
+    snprintf (buf2, 1024, "%s::%s.spef", ns, p->getName());
+  }
+  else {
+    snprintf (buf, 1024, "spef.%s", p->getName());
+    snprintf (buf2, 1024, "%s.spef", p->getName());
+  }
+  if (ns) {
+    FREE (ns);
+  }
+  spf = new Spef (true);
+  if (config_exists (buf)) {
+    fp = fopen (config_get_string (buf), "r");
+    if (!fp) {
+      warning ("Could not open SPEF file `%s' for reading",
+	       config_get_string (buf));
+      delete spf;
+      return NULL;
+    }
+  }
+  else {
+    // look for <process>.spef
+    fp = fopen (buf2, "r");
+    if (!fp) {
+      delete spf;
+      return NULL;
+    }
+  }
+  spf->Read (fp);
+  fclose (fp);
+  return spf;
 }
-
-
-static bool load_sdf (ActDynamicPass *dp)
-{
-  SDF *sdf;
-  
-  if (!dp->hasParam ("sdf")) {
-    char buf[1024];
-    char *ns = NULL;
-    Process *root = dp->getRoot();
-    FILE *fp;
-    
-    Assert(root, "What?");
-    if (root->getns() && root->getns() != ActNamespace::Global()) {
-      ns = root->getns()->Name();
-    }
-    if (ns) {
-      snprintf (buf, 1024, "%s::%s.sdf", ns, root->getName());
-    }
-    else {
-      snprintf (buf, 1024, "%s.sdf", root->getName());
-    }
-    if (ns) {
-      FREE (ns);
-    }
-    sdf = new SDF (true);
-    if (config_exists (buf)) {
-      fp = fopen (config_get_string (buf), "r");
-      if (!fp) {
-	warning ("Could not open SDF file `%s' for reading",
-		 config_get_string (buf));
-	delete sdf;
-	return false;
-      }
-    }
-    else {
-      fp = fopen (buf, "r");
-      if (!fp) {
-	delete sdf;
-	return false;
-      }
-    }
-    sdf->Read (fp);
-    fclose (fp);
-    dp->setParam ("sdf", sdf);
-  }
-  return true;
-}  
-
 
 /* Not defining this
 void annotate_pass_run (ActPass *ap, Process *p)
@@ -141,59 +91,39 @@ void annotate_pass_recursive (ActPass *ap, Process *p, int mode);
 
 void *annotate_pass_proc (ActPass *ap, Process *p, int mode)
 {
-  char * s= NULL;
+  char *s = NULL;
   Spef *spf = NULL;
-  SDF *sdf = NULL;
   ActDynamicPass *dp = dynamic_cast<ActDynamicPass *> (ap);
 
-  if (!p || !dp->getRoot()) {
+  if (!p) {
     /* run on the top level global namespace */
     printf ("Annotation pass must be run with a specified top-level process only.");
     return NULL;
   }
-
-  if (dp->getRoot() == p) {
-    /* load in SPEF and/or SDF files for the top-level process */
-    unsigned int flags;
-
-    if (dp->hasParam ("annotate")) {
-      flags = dp->getIntParam ("annotate");
-    }
-    else {
-      flags = 0;
-    }
-    if (flags & 1) {
-      if (!load_spef (dp)) {
-	warning ("Annotation pass: SPEF reading failed!");
-      }
-    }
-    if (flags & 2) {
-      if (!load_sdf (dp)) {
-	warning ("Annotation pass: SDF reading failed!");
-      }
-    }
-  }
-  spf = (Spef *) dp->getPtrParam ("spef");
-  sdf = (SDF *) dp->getPtrParam ("sdf");
-  if (!spf && !sdf) {
+  if (!dp->getRoot()) {
     return NULL;
   }
 
-  /* For SPEF files, we need to organize everything by hierarchy!
-     --> resistance should be consistent per cell
-     --> cap should be broken down into local + residual
-  */
-
-  return NULL;
+  spf = load_spef (p);
+  if (spf->isValid()) {
+    return spf;
+  }
+  else {
+    delete spf;
+    return NULL;
+  }
 }
 
 void annotate_pass_free (ActPass *ap, void *v)
 {
-  /* this should be NULL, ignore it */
+  Spef *spf = (Spef *) v;
+  if (spf) {
+    delete spf;
+  }
 }
 
 
 void annotate_pass_done (ActPass *ap)
 {
-  printf ("Pass deleted!\n");
+  // nothing to do here!
 }

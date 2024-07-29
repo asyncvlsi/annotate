@@ -396,6 +396,11 @@ class Spef {
 
   char getPinDivider () { return _delimiter; }
 
+  /**
+   * @return true if this is a valid SPEF file, false otherwise
+   */
+  bool isValid() { return _valid ? true : false; }
+
 private:
   /** The lexical analysis engine. This is non-NULL during the parsing
       phase only.

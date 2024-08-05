@@ -43,10 +43,10 @@ SRCS=$(OBJS:.o=.cc) $(SHOBJS:.os=.cc)
 include $(ACT_HOME)/scripts/Makefile.std
 
 $(EXE): $(MAIN) $(LIB) $(LIBACTDEPEND)
-	$(CXX) $(CFLAGS) $(MAIN) -o $(EXE) $(LIBACT) -lactannotate
+	$(CXX) $(CFLAGS) $(MAIN) -o $(EXE) -lactannotate $(LIBACT)
 
 $(EXE2): $(MAIN2) $(LIB) $(LIBACTDEPEND)
-	$(CXX) $(CFLAGS) $(MAIN2) -o $(EXE2) $(LIBACT) -lactannotate
+	$(CXX) $(CFLAGS) $(MAIN2) -o $(EXE2) -lactannotate $(LIBACT)
 
 $(LIB1): $(LIBOBJ)
 	ar ruv $(LIB1) $(LIBOBJ)

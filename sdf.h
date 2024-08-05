@@ -201,9 +201,11 @@ struct sdf_path {
   unsigned int type:3;		///< 1 = iopath, 2 = port, 3 =
 				///< interconnect, 4 = device, 5 =
 				///< netdelay
-  unsigned int abs:1;		//<  1 for ABSOLUTE, 2 for INCREMENT
+  unsigned int abs:1;		///<  1 for ABSOLUTE, 2 for INCREMENT
 
-  unsigned int dirfrom:2;	//< 0 = none, 1 = posedge, 2 = negedge
+  unsigned int dirfrom:2;	///< 0 = none, 1 = posedge, 2 = negedge
+
+  unsigned int used:1;		///< 1 if this got used, 0 otherwise
 
   
   sdf_cond_expr *e;		///< conditional expression, if any
@@ -254,6 +256,7 @@ struct sdf_path {
     from = NULL;
     to = NULL;
     dirfrom = 0;
+    used = 0;
     d.init();
   }
   ~sdf_path() { clear (); }
@@ -269,6 +272,13 @@ struct sdf_path {
     }
   }
 
+  void markUsed() {
+    used = 1;
+  }
+  bool isUsed() {
+    if (used) return true;
+    return false;
+  }
 };
 
 

@@ -205,6 +205,13 @@ struct spef_node {
 
   void Print (FILE *fp, char delim);
   bool exists() { return pin ? true : false; }
+  void clear () {
+    if (SPEF_GET_PTR (inst))
+      delete SPEF_GET_PTR(inst);
+    if (SPEF_GET_PTR (pin))
+      delete SPEF_GET_PTR(pin);
+    inst = NULL; pin = NULL;
+  }
 };
 
 
@@ -230,7 +237,10 @@ struct spef_parasitic {
   /* XXX: sensitivity: use with variations */
 
   void Print (FILE *fp, char delim);
-  
+  void clear() {
+    n.clear ();
+    n2.clear ();
+ }
 };
 
 
@@ -260,11 +270,8 @@ struct spef_detailed_net {
  * the complex pole and residue values for the particular node.
  */
 struct spef_rc_desc {
-  /// instance name
-  ActId *inst;
-
-  /// pin name
-  ActId *pin;
+  /// instance + pin name
+  spef_node n;
 
   /// RC value
   spef_triplet val;
@@ -315,7 +322,8 @@ struct spef_reduced {
  * the information for all the drivers.
  */
 struct spef_reduced_net {
-  /// an array of drivers, each with their own end-point RC values and parasitics
+  /// an array of drivers, each with their own end-point RC values and
+  /// parasitics
   A_DECL (spef_reduced, drivers);
 };
 
@@ -345,7 +353,60 @@ struct spef_net {
   } u /** the parasitic information */;
 
 
+  spef_net() {
+    net = NULL; type = 0;
+    A_INIT (u.d.conn);
+    A_INIT (u.d.caps);
+    A_INIT (u.d.induc);
+    A_INIT (u.d.res);
+  }
+  
+  ~spef_net() {
+    if (type == 0 || type == 2) {
+      for (int i=0; i < A_LEN (u.d.conn); i++) {
+	if (SPEF_GET_PTR (u.d.conn[i].inst)) {
+	  delete SPEF_GET_PTR (u.d.conn[i].inst);
+	}
+	if (SPEF_GET_PTR (u.d.conn[i].pin)) {
+	  delete SPEF_GET_PTR (u.d.conn[i].pin);
+	}
+      }
+      A_FREE (u.d.conn);
+
+      for (int i=0; i < A_LEN (u.d.caps); i++) {
+	u.d.caps[i].clear();
+      }
+      A_FREE (u.d.caps);
+      for (int i=0; i < A_LEN (u.d.induc); i++) {
+	u.d.induc[i].clear ();
+      }
+      A_FREE (u.d.induc);
+      for (int i=0; i < A_LEN (u.d.res); i++) {
+	u.d.res[i].clear ();
+      }
+      A_FREE (u.d.res);
+    }
+    else {
+      for (int i=0; i < A_LEN (u.r.drivers); i++) {
+	for (int j=0; j < A_LEN (u.r.drivers[i].rc); j++) {
+	  u.r.drivers[i].rc[j].n.clear ();
+	}
+	A_FREE (u.r.drivers[i].rc);
+	if (SPEF_GET_PTR (u.r.drivers[i].driver_inst)) {
+	  delete SPEF_GET_PTR (u.r.drivers[i].driver_inst);
+	}
+	if (SPEF_GET_PTR (u.r.drivers[i].pin)) {
+	  delete SPEF_GET_PTR (u.r.drivers[i].pin);
+	}
+	if (SPEF_GET_PTR (u.r.drivers[i].cell_type)) {
+	  delete SPEF_GET_PTR (u.r.drivers[i].cell_type);
+	}
+      }
+      A_FREE (u.r.drivers);
+    }
+  }
   void Print (Spef *S, FILE *fp);
+  void spPrint (Spef *S, FILE *fp);
 };
 
 class SpefCollection;
@@ -400,6 +461,18 @@ class Spef {
    * @return true if this is a valid SPEF file, false otherwise
    */
   bool isValid() { return _valid ? true : false; }
+
+  /**
+   * @return true if the specified net name is
+   * associated with parasitics, false otherwise
+   */
+  bool isSplit (const char *s);
+
+  /**
+   * Print out the parasitics to a file
+   * @param fp is the output file
+   */
+  void dumpRC (FILE *fp);
 
 private:
   /** The lexical analysis engine. This is non-NULL during the parsing
@@ -517,7 +590,8 @@ private:
   A_DECL (spef_defines, _defines);
 
   /// The SPEF nets with parasitic information
-  A_DECL (spef_net, _nets);
+  //A_DECL (spef_net, _nets);
+  struct cHashtable *_nets;
 
   friend class SpefCollection;
 };
@@ -549,6 +623,8 @@ private:
   struct Hashtable *H;		// hash of spef design names
 };
 
+
+struct cHashtable *idhash_new (int sz);
 
 
 #endif /* __ACT_SPEF_H__ */

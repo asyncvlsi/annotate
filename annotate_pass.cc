@@ -127,3 +127,38 @@ void annotate_pass_done (ActPass *ap)
 {
   // nothing to do here!
 }
+
+int annotate_pass_runcmd (ActPass *ap, const char *name)
+{
+  ActDynamicPass *dp = dynamic_cast<ActDynamicPass *> (ap);
+  Assert (dp, "What?");
+  if (!name) return 0;
+  if (strcmp (name, "split-net") == 0) {
+     Process *p = (Process *) dp->getPtrParam ("proc");
+     const char *net =  (const char *) dp->getPtrParam  ("net");
+     Assert (p && net, "What?");
+     Spef *spf = (Spef *) dp->getMap (p);
+     if (!spf) { return 0; }
+
+     if (spf->isSplit (net)) {
+       return 1;
+     }
+     else {
+       return 0;
+     }
+  }
+  else if (strcmp (name, "dump") == 0)  {
+     Process *p = (Process *) dp->getPtrParam ("proc");
+     FILE *fp = (FILE *) dp->getPtrParam ("outfp");
+     Assert (p && fp, "What?");
+     Spef *spf = (Spef *) dp->getMap (p);
+     if (!spf) { return 0; }
+     spf->dumpRC (fp);
+     // dump spef parasitics to file!
+     return 1;
+  }
+  else {
+     warning ("annotate: runcmd, unknown command `%s'", name);
+     return 0;
+  }
+}

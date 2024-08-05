@@ -115,6 +115,7 @@ Spef::Spef(bool mangled_ids)
   A_INIT (_ports);
   A_INIT (_phyports);
   A_INIT (_defines);
+  _nets = NULL;
 
   if (mangled_ids) {
     _a = ActNamespace::Act();
@@ -819,23 +820,64 @@ bool Spef::_read_variation_def ()
   return true;
 }
 
+// custom hash functions
+static int idhash (int sz, void *key)
+{
+  ActId *id = (ActId *) key;
+  return id->getHash (0, sz);
+}
+
+static int idmatch (void *k1, void *k2)
+{
+  ActId *id1 = (ActId *) k1;
+  ActId *id2 = (ActId *) k2;
+  return id1->isEqual (id2);
+}
+
+static void *iddup (void *k)
+{
+  ActId *id = (ActId *)k;
+  // don't clone. 
+  return k;
+}
+
+static void idfree (void *k)
+{
+  ActId *id = (ActId *) k;
+  delete id;
+}
+
+static void idprint (FILE *fp, void *k)
+{
+  // nothing
+}
+
+struct cHashtable *idhash_new (int sz)
+{
+  struct cHashtable *cH = chash_new (4);
+  cH->hash = idhash;
+  cH->match = idmatch;
+  cH->dup = iddup;
+  cH->free = idfree;
+  cH->print = idprint;
+  return cH;
+}
+
 bool Spef::_read_internal_def ()
 {
   bool found = false;
   spef_net *net;
 
-  A_INIT (_nets);
+  _nets = idhash_new (4);
   
   while (lex_sym (_l) == _star_d_net || lex_sym (_l) == _star_r_net ||
 	 lex_sym (_l) == _star_d_pnet || lex_sym (_l) == _star_r_pnet) {
     bool phys = false;
+    chash_bucket_t *cb;
 
     found = true;
 
-    A_NEW (_nets, spef_net);
-    net = &A_NEXT (_nets);
-    A_INC (_nets);
-    net->net = NULL;
+    net = new spef_net();
 
     if (lex_sym (_l) == _star_d_net) {
       net->type = 0;
@@ -858,10 +900,12 @@ bool Spef::_read_internal_def ()
       if (!((net->net = _getIndex()) || (!phys && (net->net = _getTokPath()))
 	    || (phys && (net->net = _getTokPhysicalRef())))) {
 	spef_warning (_l, "*D_NET error");
+	delete net;
 	return false;
       }
       if (!_getParasitics (&net->tot_cap)) {
 	spef_warning (_l, "*D_NET cap error");
+	delete net;
 	return false;
       }
 
@@ -885,15 +929,11 @@ bool Spef::_read_internal_def ()
 	}
 	else {
 	  spef_warning (_l, "*D_NET routing confidence error");
+	  delete net;
 	  return false;
 	}
       }
 
-      A_INIT (net->u.d.conn);
-      A_INIT (net->u.d.caps);
-      A_INIT (net->u.d.res);
-      A_INIT (net->u.d.induc);
-      
       if (lex_have (_l, _star_conn)) {
 	/* optional connection section */
 	/* *P or *I parts */
@@ -917,6 +957,7 @@ bool Spef::_read_internal_def ()
 	    if (!(!phys && _getPortName (false, &inst, &pin)) &&
 		!_getPortName (true, &inst, &pin)) {
 	      spef_warning (_l, "*P missing port");
+	      delete net;
 	      return false;
 	    }
 	    conn->type = 0;
@@ -928,6 +969,7 @@ bool Spef::_read_internal_def ()
 	      /* pin delim */
 	      if (!lex_have (_l, _tok_pin_delim)) {
 		spef_warning (_l, "*I pin error");
+		delete net;
 		return false;
 	      }
 	      pin = _getIndex();
@@ -940,6 +982,7 @@ bool Spef::_read_internal_def ()
 		}
 		if (!pin) {
 		  spef_warning (_l, "*I pin error");
+		  delete net;
 		  return false;
 		}
 	      }
@@ -947,6 +990,7 @@ bool Spef::_read_internal_def ()
 	    else if ((inst = _getTokPhysicalRef ())) {
 	      if (!lex_have (_l, _tok_pin_delim)) {
 		spef_warning (_l, "*I pin error");
+		delete net;
 		return false;
 	      }
 	      pin = _getIndex();
@@ -959,17 +1003,20 @@ bool Spef::_read_internal_def ()
 		}
 		if (!pin) {
 		  spef_warning (_l, "*I pin error");
+		  delete net;
 		  return false;
 		}
 	      }
 	    }
 	    else {
 	      spef_warning (_l, "*I pin error");
+	      delete net;
 	      return false;
 	    }
 	    Assert (pin, "Hmm?");
 	    if (MAP_GET_PTR(pin)->Rest() && !_a) {
 	      spef_warning (_l, "pin error");
+	      delete net;
 	      return false;
 	    }
 	    conn->type = 1;
@@ -982,6 +1029,7 @@ bool Spef::_read_internal_def ()
 	  dir = lex_get_dir (_l);
 	  if (dir == -1) {
 	    spef_warning (_l, "*CONN direction error");
+	    delete net;
 	    return false;
 	  }
 	  conn->dir = dir;
@@ -989,6 +1037,7 @@ bool Spef::_read_internal_def ()
 	}
 	if (!found) {
 	  spef_warning (_l, "*CONN missing a conn_def");
+	  delete net;
 	  return false;
 	}
 	
@@ -1008,27 +1057,33 @@ bool Spef::_read_internal_def ()
 	  ActId *tmp;
 	  if (!(tmp = _getIndex()) && !(tmp = _getTokPath())) {
 	    spef_warning (_l, "*N internal node error");
+	    delete net;
 	    return false;
 	  }
 	  conn->inst = tmp;
 	  if (!lex_have (_l, _tok_pin_delim)) {
 	    spef_warning (_l, "*N internal node error");
+	    delete net;
 	    return false;
 	  }
 	  if (!(lex_sym (_l) == l_integer)) {
 	    spef_warning (_l, "*N missing integer");
+	    delete net;
 	    return false;
 	  }
 	  conn->ipin = lex_integer (_l);
 	  lex_getsym (_l);
 	  if (!lex_have (_l, _star_c)) {
 	    spef_warning (_l, "*N missing *C");
+	    delete net;
 	    return false;
 	  }
 	  if (!lex_have_number (_l, &conn->cx)) {
+	    delete net;
 	    return false;
 	  }
 	  if (!lex_have_number (_l, &conn->cy)) {
+	    delete net;
 	    return false;
 	  }
 	}
@@ -1050,6 +1105,7 @@ bool Spef::_read_internal_def ()
 
 	  if (!_getPinPortInternal (&sc->n)) {
 	    spef_warning (_l, "node error");
+	    delete net;
 	    return false;
 	  }
 
@@ -1062,6 +1118,7 @@ bool Spef::_read_internal_def ()
 
 	  if (!_getParasitics (&sc->val)) {
 	    spef_warning (_l, "error in parasitics");
+	    delete net;
 	    return false;
 	  }
 	  SKIP_SC_OPTIONAL;
@@ -1083,15 +1140,18 @@ bool Spef::_read_internal_def ()
 
 	  if (!_getPinPortInternal (&sc->n)) {
 	    spef_warning (_l, "*RES node error");
+	    delete net;
 	    return false;
 	  }
 
 	  if (!_getPinPortInternal (&sc->n2)) {
 	    spef_warning (_l, "*RES node error");
+	    delete net;
 	    return false;
 	  }
 	  if (!_getParasitics (&sc->val)) {
 	    spef_warning (_l, "error in parasitics");
+	    delete net;
 	    return false;
 	  }
 	  A_INC (net->u.d.res);
@@ -1106,18 +1166,20 @@ bool Spef::_read_internal_def ()
 
       if (!lex_have (_l, _star_end)) {
 	spef_warning (_l, "*D_NET missing *END");
+	delete net;
 	return false;
       }
-      
     }
     else if (lex_have (_l, _star_r_net) || lex_have (_l, _star_r_pnet)) {
       if (!((net->net = _getIndex()) || (!phys && (net->net = _getTokPath()))
 	    || (phys && (net->net = _getTokPhysicalRef())))) {
 	spef_warning (_l, "*R_NET error");
+	delete net;
 	return false;
       }
       if (!_getParasitics (&net->tot_cap)) {
 	spef_warning (_l, "*R_NET error");
+	delete net;
 	return false;
       }
       net->routing_confidence = -1;
@@ -1128,6 +1190,7 @@ bool Spef::_read_internal_def ()
 	}
 	else {
 	  spef_warning (_l, "*R_NET routing confidence error");
+	  delete net;
 	  return false;
 	}
       }
@@ -1145,53 +1208,63 @@ bool Spef::_read_internal_def ()
 	if (!((rnet->driver_inst = _getIndex()) ||
 	      (rnet->driver_inst = _getTokPath()))) {
 	  spef_warning (_l, "*R_NET driver pin error");
+	  delete net;
 	  return false;
 	}
 
 	if (_tok_pin_delim == -1 || !lex_have (_l, _tok_pin_delim)) {
 	  spef_warning (_l, "missing pin");
+	  delete net;
 	  return false;
 	}
 
 	if (!((rnet->pin = _getIndex()) || (rnet->pin = _getTokPath()))) {
 	  spef_warning (_l, "missing pin");
+	  delete net;
 	  return false;
 	}
 
 	if (!lex_have (_l, _star_cell)) {
 	  spef_warning (_l, "missing *CELL");
+	  delete net;
 	  return false;
 	}
 
 	if (!((rnet->cell_type = _getIndex()) ||
 	      (rnet->cell_type = _getTokPath()))) {
 	  spef_warning (_l, "*CELL error");
+	  delete net;
 	  return false;
 	}
 
 	if (!lex_have (_l, _star_c2_r1_c1)) {
 	  spef_warning (_l, "missing *C2_R1_C1");
+	  delete net;
 	  return false;
 	}
 
 	if (!_getParasitics (&rnet->c2)) {
 	  spef_warning (_l, "parasitics error");
+	  delete net;
 	  return false;
 	}
 	  
 	if (!_getParasitics (&rnet->r1)) {
 	  spef_warning (_l, "parasitics error");
+	  delete net;
 	  return false;
 	}
 	  
 	if (!_getParasitics (&rnet->c1)) {
 	  spef_warning (_l, "parasitics error");
+	  delete net;
 	  return false;
 	}
 
 	/* loads */
 	if (!lex_have (_l, _star_loads)) {
 	  spef_warning (_l, "missing *LOADS");
+	  delete net;
 	  return false;
 	}
 
@@ -1200,30 +1273,35 @@ bool Spef::_read_internal_def ()
 	  A_NEW (rnet->rc, spef_rc_desc);
 	  rc = &A_NEXT (rnet->rc);
 	  A_INC (rnet->rc);
-	  rc->inst = NULL;
-	  rc->pin = NULL;
+	  rc->n.inst = NULL;
+	  rc->n.pin = NULL;
 
-	  if (!((rc->inst = _getIndex()) || (rc->inst = _getTokPath()))) {
+	  if (!((rc->n.inst = _getIndex()) || (rc->n.inst = _getTokPath()))) {
 	    spef_warning (_l, "missing pin name for *RC");
+	    delete net;
 	    return false;
 	  }
 	  if (_tok_pin_delim == -1 || !lex_have (_l, _tok_pin_delim)) {
 	    spef_warning (_l, "missing pin");
+	    delete net;
 	    return false;
 	  }
-	  if (!((rc->pin = _getIndex()) || (rc->pin = _getTokPath()))) {
+	  if (!((rc->n.pin = _getIndex()) || (rc->n.pin = _getTokPath()))) {
 	    spef_warning (_l, "missing pin name for *RC");
+	    delete net;
 	    return false;
 	  }
 
 	  if (!_getParasitics (&rc->val)) {
 	    spef_warning (_l, "missing parastics");
+	    delete net;
 	    return false;
 	  }
 
 	  if (lex_have (_l, _star_q)) {
 	    if (lex_sym (_l) != l_integer) {
 	      spef_warning (_l, "missing index");
+	      delete net;
 	      return false;
 	    }
 	    rc->pole.idx = lex_integer (_l);
@@ -1231,15 +1309,18 @@ bool Spef::_read_internal_def ()
 
 	    if (!_getComplexParasitics (&rc->pole.re, &rc->pole.im)) {
 	      spef_warning (_l, "parasitics error");
+	      delete net;
 	      return false;
 	    }
 
 	    if (!lex_have (_l, _star_k)) {
 	      spef_warning (_l, "missing residue");
+	      delete net;
 	      return false;
 	    }
 	    if (lex_sym (_l) != l_integer) {
 	      spef_warning (_l, "missing index");
+	      delete net;
 	      return false;
 	    }
 	    rc->residue.idx = lex_integer (_l);
@@ -1247,6 +1328,7 @@ bool Spef::_read_internal_def ()
 	    
 	    if (!_getComplexParasitics (&rc->residue.re, &rc->residue.im)) {
 	      spef_warning (_l, "parasitics error");
+	      delete net;
 	      return false;
 	    }
 	  }
@@ -1256,10 +1338,24 @@ bool Spef::_read_internal_def ()
 	  }
 	}
       }
-
       if (!lex_have (_l, _star_end)) {
 	spef_warning (_l, "*R_NET missing *END");
+	delete net;
 	return false;
+      }
+    }
+    else {
+      delete net;
+      net = NULL;
+    }
+    if (net) {
+      if (chash_lookup (_nets, MAP_GET_PTR (net->net))) {
+	warning ("Duplicate net found; skipped!");
+	delete net;
+      }
+      else {
+	cb = chash_add (_nets, MAP_GET_PTR (net->net));
+	cb->v = net;
       }
     }
   }
@@ -2004,9 +2100,13 @@ void Spef::Print (FILE *fp)
     }
   }
 
-  if (A_LEN (_nets) > 0) {
-    for (int i=0; i < A_LEN (_nets); i++) {
-      _nets[i].Print (this, fp);
+  if (_nets && _nets->n > 0) {
+    chash_iter_t it;
+    chash_bucket_t *cb;
+    chash_iter_init (_nets, &it);
+    while ((cb = chash_iter_next (_nets, &it))) {
+      spef_net *n = (spef_net *) cb->v;
+      n->Print (this, fp);
     }
   }
 }
@@ -2076,11 +2176,11 @@ void spef_net::Print (Spef *S, FILE *fp)
       fprintf (fp, "\n*LOADS\n");
       for (int j=0; j < A_LEN (r->rc); j++) {
 	fprintf (fp, "*RC ");
-	if (r->rc[j].inst) {
-	  MAP_GET_PTR(r->rc[j].inst)->Print (fp);
+	if (r->rc[j].n.inst) {
+	  MAP_GET_PTR(r->rc[j].n.inst)->Print (fp);
 	  fprintf (fp, "%c", pin_delim);
 	}
-	MAP_GET_PTR(r->rc[j].pin)->Print (fp);
+	MAP_GET_PTR(r->rc[j].n.pin)->Print (fp);
 	fprintf (fp, " ");
 	_print_triplet (fp, &r->rc[j].val);
 	fprintf (fp, "\n");
@@ -2174,6 +2274,159 @@ void spef_net::Print (Spef *S, FILE *fp)
   fprintf (fp, "*END\n");
 }
 
+void spef_net::spPrint (Spef *S, FILE *fp)
+{
+  if (type == 0) {
+    fprintf (fp, "*D_NET ");
+  }
+  else if (type == 1) {
+    fprintf (fp, "*R_NET ");
+  }
+  else if (type == 2) {
+    fprintf (fp, "*D_PNET ");
+  }
+  else {
+    fprintf (fp, "*R_PNET ");
+  }
+
+  char pin_delim = S->getPinDivider ();
+
+  // this is not the *<NUM> format!
+  MAP_GET_PTR(net)->Print (fp);
+
+  fprintf (fp, "\n");
+
+#if 0  
+  fprintf (fp, " ");
+  _print_triplet (fp, &tot_cap);
+  if (routing_confidence != -1) {
+    fprintf (fp, " %d", routing_confidence);
+  }
+  fprintf (fp, "\n");
+#endif  
+
+  if (type == 1 || type == 3) {
+    // XXX: ignore this for the moment
+#if 0    
+    for (int i=0; i < A_LEN (u.r.drivers); i++) {
+      spef_reduced *r = u.r.drivers + i;
+      fprintf (fp, "*DRIVER ");
+      if (r->driver_inst) {
+	MAP_GET_PTR(r->driver_inst)->Print (fp);
+	fprintf (fp, "%c", pin_delim);
+      }
+      MAP_GET_PTR(r->pin)->Print (fp);
+      fprintf (fp, "\n");
+      fprintf (fp, "*CELL ");
+      MAP_GET_PTR(r->cell_type)->Print (fp);
+      fprintf (fp, "\n");
+      fprintf (fp, "*C2_R1_C1 ");
+      _print_triplet (fp, &r->c2);
+      fprintf (fp, " ");
+      _print_triplet (fp, &r->r1);
+      fprintf (fp, " ");
+      _print_triplet (fp, &r->c1);
+      fprintf (fp, "\n*LOADS\n");
+      for (int j=0; j < A_LEN (r->rc); j++) {
+	fprintf (fp, "*RC ");
+	if (r->rc[j].n.inst) {
+	  MAP_GET_PTR(r->rc[j].n.inst)->Print (fp);
+	  fprintf (fp, "%c", pin_delim);
+	}
+	MAP_GET_PTR(r->rc[j].n.pin)->Print (fp);
+	fprintf (fp, " ");
+	_print_triplet (fp, &r->rc[j].val);
+	fprintf (fp, "\n");
+	if (r->rc[j].pole.idx != -1) {
+	  fprintf (fp, "*Q %d ", r->rc[j].pole.idx);
+	  _print_triplet_complex (fp, &r->rc[j].pole.re, &r->rc[j].pole.im);
+	  fprintf (fp, "\n");
+	}
+	if (r->rc[j].residue.idx != -1) {
+	  fprintf (fp, "*K %d ", r->rc[j].residue.idx);
+	  _print_triplet_complex (fp, &r->rc[j].residue.re, &r->rc[j].residue.im);
+	  fprintf (fp, "\n");
+	}
+      }
+    }
+#endif    
+  }
+  else {
+    // D_NET
+    //  conn_sec cap_sec res_sec induc_sec *END
+#if 0    
+    if (A_LEN (u.d.conn) > 0) {
+      fprintf (fp, "*CONN\n");
+    }
+    for (int i=0; i < A_LEN (u.d.conn); i++) {
+      spef_conn *c = u.d.conn + i;
+      if (c->type == 0) {
+	fprintf (fp, "*P ");
+      }
+      else if (c->type == 1) {
+	fprintf (fp, "*I ");
+      }
+      else if (c->type == 2) {
+	fprintf( fp, "*N ");
+      }
+      else {
+	Assert (0, "Invalid conn type");
+      }
+      if (c->inst) {
+	MAP_GET_PTR(c->inst)->Print (fp);
+	fprintf (fp, "%c", pin_delim);
+	MAP_GET_PTR(c->pin)->Print (fp);
+      }
+      else {
+	MAP_GET_PTR(c->pin)->Print (fp);
+      }
+      if (c->type == 2) {
+	fprintf (fp, "%c%d %g %g\n", pin_delim, c->ipin, c->cx, c->cy);
+      }
+      else {
+	if (c->dir == 0) {
+	  fprintf (fp, " I");
+	}
+	else if (c->dir == 1) {
+	  fprintf (fp, " O");
+	}
+	else {
+	  Assert (c->dir == 2, "What?");
+	  fprintf (fp, " B");
+	}
+	if (c->a) {
+	  _print_attributes (fp, c->a);
+	}
+      }
+      fprintf (fp, "\n");
+    }
+
+    if (A_LEN (u.d.caps) > 0) {
+      fprintf (fp, "*CAP\n");
+      for (int i=0; i < A_LEN (u.d.caps); i++) {
+	u.d.caps[i].Print (fp, pin_delim);
+	fprintf (fp, "\n");
+      }
+    }
+    if (A_LEN (u.d.res) > 0) {
+      fprintf (fp, "*RES\n");
+      for (int i=0; i < A_LEN (u.d.res); i++) {
+	u.d.res[i].Print (fp, pin_delim);
+	fprintf (fp, "\n");
+      }
+    }
+    if (A_LEN (u.d.induc) > 0) {
+      fprintf (fp, "*INDUC\n");
+      for (int i=0; i < A_LEN (u.d.induc); i++) {
+	u.d.induc[i].Print (fp, pin_delim);
+	fprintf (fp, "\n");
+      }
+    }
+#endif    
+  }
+}
+
+
 
 void spef_node::Print (FILE *fp, char delim)
 {
@@ -2197,4 +2450,34 @@ void spef_parasitic::Print (FILE *fp, char delim)
     fprintf (fp, " ");
   }
   _print_triplet (fp, &val);
+}
+
+
+bool Spef::isSplit (const char *s)
+{
+  if (!_nets) {
+    return false;
+  }
+  char *t = Strdup (s);
+  ActId *id = _strToId (t);
+  FREE (t);
+  if (chash_lookup (_nets, id)) {
+    delete id;
+    return true;
+  }
+  delete id;
+  return false;
+}
+
+void Spef::dumpRC (FILE *fp)
+{
+  if (_nets && _nets->n > 0) {
+    chash_iter_t it;
+    chash_bucket_t *cb;
+    chash_iter_init (_nets, &it);
+    while ((cb = chash_iter_next (_nets, &it))) {
+      spef_net *n = (spef_net *) cb->v;
+      n->spPrint (this, fp);
+    }
+  }
 }

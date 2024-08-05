@@ -439,40 +439,6 @@ bool SDF::_read_sdfheader ()
   return true;
 }
 
-
-// custom hash functions
-static int idhash (int sz, void *key)
-{
-  ActId *id = (ActId *) key;
-  return id->getHash (0, sz);
-}
-
-static int idmatch (void *k1, void *k2)
-{
-  ActId *id1 = (ActId *) k1;
-  ActId *id2 = (ActId *) k2;
-  return id1->isEqual (id2);
-}
-
-static void *iddup (void *k)
-{
-  ActId *id = (ActId *)k;
-  // don't clone. 
-  return k;
-}
-
-static void idfree (void *k)
-{
-  ActId *id = (ActId *) k;
-  delete id;
-}
-
-static void idprint (FILE *fp, void *k)
-{
-  // nothing
-}
-
-
 #define ERR_RET if (cur) { cur->clear(); delete cur; } lex_set_position (_l); lex_pop_position (_l); return false
 
 bool SDF::_read_cell()
@@ -779,12 +745,7 @@ bool SDF::_read_cell()
       // ok now take this sdf_cell and put in into the hash table!
       if (instinfo) {
 	if (!ct->inst) {
-	  ct->inst = chash_new (4);
-	  ct->inst->hash = idhash;
-	  ct->inst->match = idmatch;
-	  ct->inst->dup = iddup;
-	  ct->inst->free = idfree;
-	  ct->inst->print = idprint;
+	  ct->inst = idhash_new (4);
 	}
 	chash_bucket_t *cb = chash_lookup (ct->inst, instinfo);
 	if (!cb) {

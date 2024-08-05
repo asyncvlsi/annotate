@@ -2400,21 +2400,25 @@ void spef_net::spPrint (Spef *S, FILE *fp)
       }
       fprintf (fp, "\n");
     }
-
+#endif
+  
     if (A_LEN (u.d.caps) > 0) {
       fprintf (fp, "*CAP\n");
       for (int i=0; i < A_LEN (u.d.caps); i++) {
-	u.d.caps[i].Print (fp, pin_delim);
+	fprintf (fp, "C%d", i);
+	u.d.caps[i].spPrint (fp, pin_delim, S->unitCap());
 	fprintf (fp, "\n");
       }
     }
     if (A_LEN (u.d.res) > 0) {
       fprintf (fp, "*RES\n");
       for (int i=0; i < A_LEN (u.d.res); i++) {
-	u.d.res[i].Print (fp, pin_delim);
+	fprintf (fp, "R%d", i);
+	u.d.res[i].spPrint (fp, pin_delim, S->unitResis());
 	fprintf (fp, "\n");
       }
     }
+#if 0    
     if (A_LEN (u.d.induc) > 0) {
       fprintf (fp, "*INDUC\n");
       for (int i=0; i < A_LEN (u.d.induc); i++) {
@@ -2422,7 +2426,7 @@ void spef_net::spPrint (Spef *S, FILE *fp)
 	fprintf (fp, "\n");
       }
     }
-#endif    
+#endif
   }
 }
 
@@ -2440,6 +2444,38 @@ void spef_node::Print (FILE *fp, char delim)
   }
 }
 
+void spef_node::mPrint (FILE *fp, char delim)
+{
+  char buf[10240];
+  int len, sz, l;
+  sz = 10240;
+  len = 0;
+  if (inst) {
+    MAP_GET_PTR (inst)->sPrint (buf + len, sz);
+    l = strlen (buf + len);
+    len += l;
+    sz -= l;
+    if (sz > 1) {
+      snprintf (buf + len, sz, "%c", delim);
+      len++;
+      sz--;
+      if (sz > 1) {
+	MAP_GET_PTR (pin)->sPrint (buf+len, sz);
+      }
+    }
+  }
+  else {
+    MAP_GET_PTR (pin)->sPrint (buf+len, sz);
+  }
+  if (ActNamespace::Act()) {
+    ActNamespace::Act()->mfprintf (fp, "%s", buf);
+  }
+  else {
+    fprintf (fp, "%s", buf);
+  }    
+}
+
+
 void spef_parasitic::Print (FILE *fp, char delim)
 {
   fprintf (fp, "%d ", id);
@@ -2450,6 +2486,37 @@ void spef_parasitic::Print (FILE *fp, char delim)
     fprintf (fp, " ");
   }
   _print_triplet (fp, &val);
+}
+
+static void print_number (FILE *fp, double x)
+{
+  if (x > 1e3) {
+    fprintf (fp, "%gK", x*1e-3);
+  }
+  if (x > 1e-3) {
+    fprintf (fp, "%g", x);
+  }
+  else if (x > 1e-9) {
+    fprintf (fp, "%gU", x*1e6);
+  }
+  else {
+    fprintf (fp, "%gP", x*1e12);
+  }
+}
+
+void spef_parasitic::spPrint (FILE *fp, char delim, double units)
+{
+  fprintf (fp, "_%d ", id);
+  n.mPrint (fp, delim);
+  fprintf (fp, " ");
+  if (n2.exists()) {
+    n2.mPrint (fp, delim);
+  }
+  else {
+    fprintf (fp, "0");
+  }
+  fprintf (fp, " ");
+  print_number (fp, units*val.typ);
 }
 
 

@@ -204,6 +204,7 @@ struct spef_node {
   ActId *pin;			// or pin
 
   void Print (FILE *fp, char delim);
+  void mPrint (FILE *fp, char delim);
   bool exists() { return pin ? true : false; }
   void clear () {
     if (SPEF_GET_PTR (inst))
@@ -237,6 +238,7 @@ struct spef_parasitic {
   /* XXX: sensitivity: use with variations */
 
   void Print (FILE *fp, char delim);
+  void spPrint (FILE *fp, char delim, double units);
   void clear() {
     n.clear ();
     n2.clear ();
@@ -473,6 +475,16 @@ class Spef {
    * @param fp is the output file
    */
   void dumpRC (FILE *fp);
+
+  /**
+   * @return capacitance of 1 unit (F)
+   */
+  double unitCap() { return _c_unit; }
+
+  /**
+   * @return resistance of 1 unit (Ohms)
+   */
+  double unitResis() { return _r_unit; }
 
 private:
   /** The lexical analysis engine. This is non-NULL during the parsing

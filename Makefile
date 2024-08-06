@@ -1,13 +1,13 @@
 #-------------------------------------------------------------------------
 #
-#  Copyright (c) 2018 Rajit Manohar
+#  Copyright (c) 2022-2024 Rajit Manohar
 #
-#  This program is free software; you can redistribute it and/or
-#  modify it under the terms of the GNU General Public License
-#  as published by the Free Software Foundation; either version 2
-#  of the License, or (at your option) any later version.
+#  This library is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU Lesser General Public
+#  License as published by the Free Software Foundation; either
+#  version 2.1 of the License, or (at your option) any later version.
 #
-#  This program is distributed in the hope that it will be useful,
+#  This library is distributed in the hope that it will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
@@ -43,10 +43,10 @@ SRCS=$(OBJS:.o=.cc) $(SHOBJS:.os=.cc)
 include $(ACT_HOME)/scripts/Makefile.std
 
 $(EXE): $(MAIN) $(LIB) $(LIBACTDEPEND)
-	$(CXX) $(CFLAGS) $(MAIN) -o $(EXE) $(LIBACT) -lactannotate
+	$(CXX) $(CFLAGS) $(MAIN) -o $(EXE) -lactannotate $(LIBACT)
 
 $(EXE2): $(MAIN2) $(LIB) $(LIBACTDEPEND)
-	$(CXX) $(CFLAGS) $(MAIN2) -o $(EXE2) $(LIBACT) -lactannotate
+	$(CXX) $(CFLAGS) $(MAIN2) -o $(EXE2) -lactannotate $(LIBACT)
 
 $(LIB1): $(LIBOBJ)
 	ar ruv $(LIB1) $(LIBOBJ)

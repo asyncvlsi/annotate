@@ -1,6 +1,6 @@
 /*************************************************************************
  *
- *  Copyright (c) 2022 Rajit Manohar
+ *  Copyright (c) 2022-2024 Rajit Manohar
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public

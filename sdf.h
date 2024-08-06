@@ -293,9 +293,13 @@ struct sdf_cell {
   // energy records
   A_DECL (sdf_path, _epaths);
 
+  // is this used?
+  bool used;
+
   sdf_cell() {
     A_INIT (_paths);
     A_INIT (_epaths);
+    used = false;
   }
   ~sdf_cell() {
     clear();
@@ -326,6 +330,16 @@ struct sdf_celltype {
   struct cHashtable *inst;	///< Hash from ActId (instance) to
 				///instance-specific cell delay. NULL
 				///if none are present.
+
+  /**
+   * Given an instance, return instance-specific celltype or the
+   * generic one
+   * @param inst the instance name to lookup
+   * @return most specific cell delay info
+   */
+  sdf_cell *getInst (ActId *inst);
+
+  bool used;			///< did this get seen at all?
 };  
 
 class SDF {
@@ -358,6 +372,13 @@ class SDF {
    * information, false otherwise.
    */
   bool hasPerInst() { return _perinst; }
+
+  /**
+   * Lookup delay/energy tables for a cell
+   * @param s is the cell type string
+   * @return pointer to sdf_celltype, if found, NULL otherwise
+   */
+  sdf_celltype *getCell (const char *s);
 
  private:
   Act *_a;			///< ACT data structure, if any

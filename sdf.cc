@@ -476,6 +476,7 @@ bool SDF::_read_cell()
 	NEW (ct, struct sdf_celltype);
 	ct->all = NULL;
 	ct->inst = NULL;
+	ct->used = false;
 	b->v = ct;
       }
       FREE (celltype);
@@ -1233,3 +1234,30 @@ void sdf_cell::Print (FILE *fp, const char *ts, char divider)
   }
   fprintf (fp, "%s)\n", ts);
 }  
+
+
+sdf_celltype *SDF::getCell (const char *s)
+{
+  if (!s) return NULL;
+  hash_bucket_t *b;
+  b = hash_lookup (_cellH, s);
+  if (!b) {
+    return NULL;
+  }
+  return (sdf_celltype *) b->v;
+}
+
+sdf_cell *sdf_celltype::getInst (ActId *id)
+{
+  if (!id) {
+    return all;
+  }
+  chash_bucket_t *cb;
+  cb = chash_lookup (inst, id);
+  if (cb) {
+    return (sdf_cell *) cb->v;
+  }
+  else {
+    return all;
+  }
+}

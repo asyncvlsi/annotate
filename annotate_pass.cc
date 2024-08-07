@@ -25,6 +25,7 @@
 #include <act/passes.h>
 #include "spef.h"
 #include "sdf.h"
+#include "annotate_pass.h"
 
 void annotate_pass_init (ActPass *ap)
 {

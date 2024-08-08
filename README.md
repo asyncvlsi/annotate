@@ -23,3 +23,12 @@ end
 ## SDF
 
 SDF files are read once for the entire design, starting at the top-level. SDF annotations are matched using `CELLTYPE` and `INSTANCE` fields. The `CELLTYPE` field matches the process name, and `INSTANCE` field matches the ACT instance.
+
+
+## Build instructions
+
+This library is for use with [the ACT toolkit](https://github.com/asyncvlsi/act).
+
+   * Please install the ACT toolkit first; installation instructions are [here](https://github.com/asyncvlsi/act/blob/master/README.md).
+   * Build this program using the standard ACT tool install instructions [here](https://github.com/asyncvlsi/act/blob/master/README_tool.md).
+

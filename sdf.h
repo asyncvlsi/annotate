@@ -380,6 +380,13 @@ class SDF {
    */
   sdf_celltype *getCell (const char *s);
 
+  /**
+   * Report unused cell information
+   * @param msg is the message prefix
+   * @param fp is the output log file
+   */
+  void reportUnusedCells (const char *msg, FILE *fp);
+
  private:
   Act *_a;			///< ACT data structure, if any
 

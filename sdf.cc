@@ -913,6 +913,19 @@ void SDF::Print (FILE *fp)
   return;
 }
 
+static int _valid_escaped_chars (char c)
+{
+  if (c == '!' || c == '"' || c == '#' || c == '$' || c == '%' || c == '&' ||
+      c == '(' || c == ')' || c == '*' || c == '+' || c == ',' || c == '-' ||
+      c == '.' || c == '/' || c == ':' ||
+      c == ';' || c == '<' || c == '=' || c == '>' || c == '?' || c == '@' ||
+      c == '[' || c == '\\' || c == ']' ||c == '^' || c == '`' || c == '{' ||
+      c == '|' || c == '}' || c == '~') {
+    return 1;
+  }
+  return 0;
+}
+
 
 ActId *SDF::_parse_hier_id ()
 {
@@ -930,8 +943,13 @@ ActId *SDF::_parse_hier_id ()
       REALLOC (s, char, sz*2);
       sz *= 2;
     }
-    strcat (s, lex_tokenstring (_l));
-    pos += l;
+    for (int i=0; lex_tokenstring(_l)[i]; i++) {
+      if (lex_tokenstring (_l)[i] == '\\') {
+	i++;
+      }
+      s[pos++] = lex_tokenstring (_l)[i];
+    }
+    s[pos] = '\0';
     lex_getsym (_l);
     if (strlen (lex_whitespace (_l)) > 0) {
       break;
@@ -1259,5 +1277,19 @@ sdf_cell *sdf_celltype::getInst (ActId *id)
   }
   else {
     return all;
+  }
+}
+
+
+void SDF::reportUnusedCells (const char *msg, FILE *fp)
+{
+  hash_bucket_t *b;
+  hash_iter_t it;
+  hash_iter_init (_cellH, &it);
+  while ((b = hash_iter_next (_cellH, &it))) {
+    sdf_celltype *ci = (sdf_celltype *) b->v;
+    if (!ci->used) {
+      fprintf (fp, "%s: %s was not used.\n", msg, b->key);
+    }
   }
 }

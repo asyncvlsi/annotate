@@ -1291,5 +1291,24 @@ void SDF::reportUnusedCells (const char *msg, FILE *fp)
     if (!ci->used) {
       fprintf (fp, "%s: %s was not used.\n", msg, b->key);
     }
+    else {
+      if (ci->all && !ci->all->used) {
+	fprintf (fp, "%s: %s / generic SDF entry not used.\n", msg, b->key);
+      }
+      if (ci->inst) {
+	chash_bucket_t *cb;
+	chash_iter_t it;
+	chash_iter_init (ci->inst, &it);
+	while ((cb = chash_iter_next (ci->inst, &it))) {
+	  sdf_cell *c = (sdf_cell *) cb->v;
+	  ActId *id = (ActId *) cb->key;
+	  if (!c->used) {
+	    fprintf (fp, "%s: %s / ", msg, b->key);
+	    id->Print (fp);
+	    fprintf (fp, " SDF entry not used.\n");
+	  }
+	}
+      }
+    }
   }
 }

@@ -387,6 +387,11 @@ class SDF {
    */
   void reportUnusedCells (const char *msg, FILE *fp);
 
+  /**
+   * @return the time scale factor
+   */
+  double getTimescale() { return _h.timescale; }
+
  private:
   Act *_a;			///< ACT data structure, if any
 

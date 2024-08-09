@@ -223,7 +223,6 @@ bool Spef::Read (const char *name)
     return false;
   }
   bool ret = Read (fp);
-  fclose (fp);
   return ret;
 }
 

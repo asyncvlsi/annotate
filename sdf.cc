@@ -143,8 +143,9 @@ bool SDF::Read (const char *name)
   }
 
   bool ret = Read (fp);
-  fclose (fp);
 
+  // lex_free closes the file
+  
   return ret;
 }
 

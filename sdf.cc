@@ -1282,7 +1282,7 @@ sdf_cell *sdf_celltype::getInst (ActId *id)
 }
 
 
-void SDF::reportUnusedCells (const char *msg, FILE *fp)
+void SDF::reportUnusedCells (const char *msg, FILE *fp, bool verbose)
 {
   hash_bucket_t *b;
   hash_iter_t it;
@@ -1293,8 +1293,19 @@ void SDF::reportUnusedCells (const char *msg, FILE *fp)
       fprintf (fp, "%s: %s was not used.\n", msg, b->key);
     }
     else {
-      if (ci->all && !ci->all->used) {
-	fprintf (fp, "%s: %s / generic SDF entry not used.\n", msg, b->key);
+      if (ci->all) {
+	if (!ci->all->used) {
+	  fprintf (fp, "%s: %s / generic SDF entry not used.\n", msg, b->key);
+	}
+	else if (verbose) {
+	  for (int i=0; i < A_LEN (ci->all->_paths); i++) {
+	    if (!ci->all->_paths[i].used) {
+	      fprintf (fp, "%s: %s/generic: ", msg, b->key);
+	      ci->all->_paths[i].printBrief (fp, _h.divider);
+	      fprintf (fp, "\n");
+	    }
+	  }
+	}
       }
       if (ci->inst) {
 	chash_bucket_t *cb;
@@ -1307,6 +1318,17 @@ void SDF::reportUnusedCells (const char *msg, FILE *fp)
 	    fprintf (fp, "%s: %s / ", msg, b->key);
 	    id->Print (fp);
 	    fprintf (fp, " SDF entry not used.\n");
+	  }
+	  else if (verbose) {
+	    for (int i=0; i < A_LEN (c->_paths); i++) {
+	      if (!c->_paths[i].used) {
+		fprintf (fp, "%s: %s/", msg, b->key);
+		id->Print (fp);
+		fprintf (fp, " ");
+		c->_paths[i].printBrief (fp, _h.divider);
+		fprintf (fp, "\n");
+	      }
+	    }
 	  }
 	}
       }

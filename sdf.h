@@ -250,6 +250,23 @@ struct sdf_path {
     }
   }
 
+  void printBrief (FILE *fp, char delim) {
+    fprintf (fp, "%s ", _names[type]);
+    if (from) {
+      from->Print (fp, NULL, 0, delim);
+      if (dirfrom == 1) {
+	fprintf (fp, "+");
+      }
+      else if (dirfrom == 2) {
+	fprintf (fp, "-");
+      }
+      fprintf (fp, " ");
+    }
+    if (to) {
+      to->Print (fp, NULL, 0, delim);
+    }
+  }
+  
   sdf_path() {
     type = SDF_ELEM_NONE;
     e = NULL;
@@ -384,8 +401,10 @@ class SDF {
    * Report unused cell information
    * @param msg is the message prefix
    * @param fp is the output log file
+   * @param verbose if this is set to true, then individual unused
+   * paths/delay directives are reported.
    */
-  void reportUnusedCells (const char *msg, FILE *fp);
+  void reportUnusedCells (const char *msg, FILE *fp, bool verbose = false);
 
   /**
    * @return the time scale factor

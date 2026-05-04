@@ -91,7 +91,7 @@ static Spef *load_spef (Process *p)
     }
   }
   spf->Read (fp);
-  fclose (fp);
+  // this closes the file
   return spf;
 }
 

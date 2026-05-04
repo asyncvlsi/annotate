@@ -109,11 +109,11 @@ void *annotate_pass_proc (ActPass *ap, Process *p, int mode)
   }
 
   spf = load_spef (p);
-  if (spf->isValid()) {
+  if (spf && spf->isValid()) {
     return spf;
   }
   else {
-    delete spf;
+    if (spf) delete spf;
     return NULL;
   }
 }

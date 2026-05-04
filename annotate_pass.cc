@@ -30,8 +30,10 @@
 void annotate_pass_init (ActPass *ap)
 {
   Act *a = ap->getAct();
-  ActDynamicPass *dp = dynamic_cast<ActDynamicPass *>(ap);
+  ActDynamicPass *dp = (ActDynamicPass *) (ap);
   Assert (dp, "Hmm..");
+
+  config_set_state (dp->getConfig ());
 
   ActPass *bp = a->pass_find ("booleanize");
 
@@ -39,6 +41,8 @@ void annotate_pass_init (ActPass *ap)
     bp = new ActBooleanizePass (a);
   }
   dp->addDependency ("booleanize");
+
+  
 }
 
 
@@ -49,8 +53,9 @@ static Spef *load_spef (Process *p)
   char buf2[1024];
   char *ns = NULL;
   FILE *fp;
-    
-  Assert(p, "What?");
+
+  Assert (p, "What?");
+
   if (p->getns() && p->getns() != ActNamespace::Global()) {
     ns = p->getns()->Name();
   }
@@ -65,7 +70,9 @@ static Spef *load_spef (Process *p)
   if (ns) {
     FREE (ns);
   }
+
   spf = new Spef (true);
+
   if (config_exists (buf)) {
     fp = fopen (config_get_string (buf), "r");
     if (!fp) {
@@ -97,7 +104,7 @@ void *annotate_pass_proc (ActPass *ap, Process *p, int mode)
 {
   char *s = NULL;
   Spef *spf = NULL;
-  ActDynamicPass *dp = dynamic_cast<ActDynamicPass *> (ap);
+  ActDynamicPass *dp = (ActDynamicPass *) (ap);
 
   if (!p) {
     /* run on the top level global namespace */
@@ -134,7 +141,7 @@ void annotate_pass_done (ActPass *ap)
 
 int annotate_pass_runcmd (ActPass *ap, const char *name)
 {
-  ActDynamicPass *dp = dynamic_cast<ActDynamicPass *> (ap);
+  ActDynamicPass *dp = (ActDynamicPass *) (ap);
   Assert (dp, "What?");
   if (!name) return 0;
   if (strcmp (name, "split-net") == 0) {

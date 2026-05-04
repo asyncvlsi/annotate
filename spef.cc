@@ -2449,6 +2449,7 @@ void spef_node::mPrint (FILE *fp, char delim)
   int len, sz, l;
   sz = 10240;
   len = 0;
+  buf[0] = '\0';
   if (inst) {
     MAP_GET_PTR (inst)->sPrint (buf + len, sz);
     l = strlen (buf + len);
@@ -2460,6 +2461,9 @@ void spef_node::mPrint (FILE *fp, char delim)
       sz--;
       if (sz > 1) {
 	MAP_GET_PTR (pin)->sPrint (buf+len, sz);
+	l = strlen (buf+len);
+	len += l;
+	sz -= l;
       }
     }
   }

@@ -204,7 +204,7 @@ struct spef_node {
   ActId *pin;			// or pin
 
   void Print (FILE *fp, char delim);
-  void mPrint (FILE *fp, char delim);
+  void mPrint (FILE *fp, char delim, const char *fetmatch);
   bool exists() { return pin ? true : false; }
   void clear () {
     if (SPEF_GET_PTR (inst))
@@ -238,7 +238,7 @@ struct spef_parasitic {
   /* XXX: sensitivity: use with variations */
 
   void Print (FILE *fp, char delim);
-  void spPrint (FILE *fp, char delim, double units);
+  void spPrint (FILE *fp, char delim, double units, const char *fetmatch);
   void clear() {
     n.clear ();
     n2.clear ();
@@ -408,7 +408,7 @@ struct spef_net {
     }
   }
   void Print (Spef *S, FILE *fp);
-  void spPrint (Spef *S, FILE *fp);
+  void spPrint (Spef *S, FILE *fp, const char *fetmatch);
 };
 
 class SpefCollection;
@@ -473,8 +473,12 @@ class Spef {
   /**
    * Print out the parasitics to a file
    * @param fp is the output file
+   * @param fetmatch if this is non-NULL, then this can be used to
+   * match fet instance names (for unmangled output no matter what)
+   * format currently supported is like printf, with only %d and
+   * constant characters.
    */
-  void dumpRC (FILE *fp);
+  void dumpRC (FILE *fp, const char *fetmatch);
 
   /**
    * @return capacitance of 1 unit (F)
@@ -604,6 +608,10 @@ private:
   /// The SPEF nets with parasitic information
   //A_DECL (spef_net, _nets);
   struct cHashtable *_nets;
+
+  // when emitting SPICE files, net names are case insensitive; this
+  // maps the lowercase net to the actual net from the SPEF file.
+  struct cHashtable *_nocase_nets;
 
   friend class SpefCollection;
 };

@@ -161,10 +161,17 @@ int annotate_pass_runcmd (ActPass *ap, const char *name)
   else if (strcmp (name, "dump") == 0)  {
      Process *p = (Process *) dp->getPtrParam ("proc");
      FILE *fp = (FILE *) dp->getPtrParam ("outfp");
+     char *fetmatch;
+     if (dp->hasParam ("fetmatch")) {
+       fetmatch = (char *) dp->getPtrParam ("fetmatch");
+     }
+     else {
+       fetmatch = NULL;
+     }
      Assert (p && fp, "What?");
      Spef *spf = (Spef *) dp->getMap (p);
      if (!spf) { return 0; }
-     spf->dumpRC (fp);
+     spf->dumpRC (fp, fetmatch);
      // dump spef parasitics to file!
      return 1;
   }

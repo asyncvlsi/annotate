@@ -21,6 +21,7 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 #include <common/misc.h>
 #include <common/ext.h>
 #include "spef.h"
@@ -116,6 +117,7 @@ Spef::Spef(bool mangled_ids)
   A_INIT (_phyports);
   A_INIT (_defines);
   _nets = NULL;
+  _nocase_nets = NULL;
 
   if (mangled_ids) {
     _a = ActNamespace::Act();
@@ -862,12 +864,47 @@ struct cHashtable *idhash_new (int sz)
   return cH;
 }
 
+
+static ActId *_to_lowercase (ActId *id)
+{
+  ActId *tmp, *ret;
+  ret = NULL;
+  tmp = NULL;
+  while (id) {
+    char *s = Strdup (id->getName());
+    char *t = s;
+    Array *a;
+    while (*t) {
+      *t = tolower (*t);
+      t++;
+    }
+    if (id->arrayInfo()) {
+      a = id->arrayInfo()->Clone ();
+    }
+    else {
+      a = NULL;
+    }
+    if (!ret) {
+      ret = new ActId (s, a);
+      tmp = ret;
+    }
+    else {
+      tmp->Append (new ActId (s, a));
+      tmp = tmp->Rest();
+    }
+    FREE (s);
+    id = id->Rest ();
+  }
+  return ret;
+}
+
 bool Spef::_read_internal_def ()
 {
   bool found = false;
   spef_net *net;
 
   _nets = idhash_new (4);
+  _nocase_nets = idhash_new (4);
   
   while (lex_sym (_l) == _star_d_net || lex_sym (_l) == _star_r_net ||
 	 lex_sym (_l) == _star_d_pnet || lex_sym (_l) == _star_r_pnet) {
@@ -1355,6 +1392,19 @@ bool Spef::_read_internal_def ()
       else {
 	cb = chash_add (_nets, MAP_GET_PTR (net->net));
 	cb->v = net;
+
+	ActId *idlc = _to_lowercase (MAP_GET_PTR (net->net));
+	if (chash_lookup (_nocase_nets, idlc)) {
+	  warning ("Collision: case sensitive and case insensitive net!");
+	  fprintf (stderr, "  > ");
+	  idlc->Print (stderr);
+	  fprintf (stderr, "\n");
+	  delete idlc;
+	}
+	else {
+	  cb = chash_add (_nocase_nets, idlc);
+	  cb->v = MAP_GET_PTR (net->net);
+	}
       }
     }
   }
@@ -2273,7 +2323,7 @@ void spef_net::Print (Spef *S, FILE *fp)
   fprintf (fp, "*END\n");
 }
 
-void spef_net::spPrint (Spef *S, FILE *fp)
+void spef_net::spPrint (Spef *S, FILE *fp, const char *fetmatch)
 {
   if (type == 0) {
     fprintf (fp, "*D_NET ");
@@ -2402,18 +2452,22 @@ void spef_net::spPrint (Spef *S, FILE *fp)
 #endif
   
     if (A_LEN (u.d.caps) > 0) {
-      fprintf (fp, "*CAP\n");
+      fprintf (fp, "** -- capacitors \n");
       for (int i=0; i < A_LEN (u.d.caps); i++) {
-	fprintf (fp, "C%d", i);
-	u.d.caps[i].spPrint (fp, pin_delim, S->unitCap());
+	fprintf (fp, "C_cnet_");
+	MAP_GET_PTR(net)->Print (fp);
+	fprintf (fp, "_%d", i);
+	u.d.caps[i].spPrint (fp, pin_delim, S->unitCap(), fetmatch);
 	fprintf (fp, "\n");
       }
     }
     if (A_LEN (u.d.res) > 0) {
-      fprintf (fp, "*RES\n");
+      fprintf (fp, "** -- resistors\n");
       for (int i=0; i < A_LEN (u.d.res); i++) {
-	fprintf (fp, "R%d", i);
-	u.d.res[i].spPrint (fp, pin_delim, S->unitResis());
+	fprintf (fp, "R_rnet_");
+	MAP_GET_PTR(net)->Print (fp);
+	fprintf (fp, "_%d", i);
+	u.d.res[i].spPrint (fp, pin_delim, S->unitResis(), fetmatch);
 	fprintf (fp, "\n");
       }
     }
@@ -2443,32 +2497,55 @@ void spef_node::Print (FILE *fp, char delim)
   }
 }
 
-void spef_node::mPrint (FILE *fp, char delim)
+static int _match_string (const char *match, char *s)
 {
-  char buf[10240];
-  int len, sz, l;
-  sz = 10240;
-  len = 0;
-  buf[0] = '\0';
-  if (inst) {
-    MAP_GET_PTR (inst)->sPrint (buf + len, sz);
-    l = strlen (buf + len);
-    len += l;
-    sz -= l;
-    if (sz > 1) {
-      snprintf (buf + len, sz, "%c", delim);
-      len++;
-      sz--;
-      if (sz > 1) {
-	MAP_GET_PTR (pin)->sPrint (buf+len, sz);
-	l = strlen (buf+len);
-	len += l;
-	sz -= l;
+  int pos = 0;
+  while (match[pos] && *s) {
+    if (match[pos] == '%' && match[pos+1] == 'd') {
+      if (!isdigit (*s)) {
+	return 0;
       }
+      while (*s && isdigit (*s)) {
+	s++;
+      }
+      pos += 2;
+    }
+    else if (match[pos] != *s) {
+      return 0;
+    }
+    else {
+      pos++;
+      s++;
     }
   }
+  if (match[pos] || *s) return 0;
+  return 1;
+}
+
+void spef_node::mPrint (FILE *fp, char delim, const char *fetmatch)
+{
+  char buf[10240];
+  int sz;
+  sz = 10240;
+  buf[0] = '\0';
+
+  if (inst) {
+    MAP_GET_PTR (inst)->sPrint (buf, sz);
+
+    if (!ActNamespace::Act() || (fetmatch && _match_string (fetmatch, buf))) {
+      fprintf (fp, "%s", buf);
+    }
+    else {
+      ActNamespace::Act()->mfprintf (fp, "%s", buf);
+    }
+    // for spice file printing, we are generating ACT names so
+    // the delimiter is dot no matter what the original SPEF had.
+    buf[0] = '.';
+    buf[1] = '\0';
+    MAP_GET_PTR (pin)->sPrint (buf+1, sz-1);
+  }
   else {
-    MAP_GET_PTR (pin)->sPrint (buf+len, sz);
+    MAP_GET_PTR (pin)->sPrint (buf, sz);
   }
   if (ActNamespace::Act()) {
     ActNamespace::Act()->mfprintf (fp, "%s", buf);
@@ -2507,13 +2584,14 @@ static void print_number (FILE *fp, double x)
   }
 }
 
-void spef_parasitic::spPrint (FILE *fp, char delim, double units)
+void spef_parasitic::spPrint (FILE *fp, char delim, double units,
+			      const char *fetmatch)
 {
   fprintf (fp, "_%d ", id);
-  n.mPrint (fp, delim);
+  n.mPrint (fp, delim, fetmatch);
   fprintf (fp, " ");
   if (n2.exists()) {
-    n2.mPrint (fp, delim);
+    n2.mPrint (fp, delim, fetmatch);
   }
   else {
     fprintf (fp, "0");
@@ -2535,11 +2613,18 @@ bool Spef::isSplit (const char *s)
     delete id;
     return true;
   }
+  ActId *lcid = _to_lowercase (id);
+  if (chash_lookup (_nocase_nets, lcid)) {
+    delete lcid;
+    delete id;
+    return true;
+  }
+  delete lcid;
   delete id;
   return false;
 }
 
-void Spef::dumpRC (FILE *fp)
+void Spef::dumpRC (FILE *fp, const char *fetmatch)
 {
   if (_nets && _nets->n > 0) {
     chash_iter_t it;
@@ -2547,7 +2632,7 @@ void Spef::dumpRC (FILE *fp)
     chash_iter_init (_nets, &it);
     while ((cb = chash_iter_next (_nets, &it))) {
       spef_net *n = (spef_net *) cb->v;
-      n->spPrint (this, fp);
+      n->spPrint (this, fp, fetmatch);
     }
   }
 }

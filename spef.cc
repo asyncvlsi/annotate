@@ -2601,7 +2601,7 @@ void spef_parasitic::spPrint (FILE *fp, char delim, double units,
 }
 
 
-bool Spef::isSplit (const char *s)
+bool Spef::isSplit (const char *s,  bool case_insensitive)
 {
   if (!_nets) {
     return false;
@@ -2613,13 +2613,15 @@ bool Spef::isSplit (const char *s)
     delete id;
     return true;
   }
-  ActId *lcid = _to_lowercase (id);
-  if (chash_lookup (_nocase_nets, lcid)) {
+  if (case_insensitive) {
+    ActId *lcid = _to_lowercase (id);
+    if (chash_lookup (_nocase_nets, lcid)) {
+      delete lcid;
+      delete id;
+      return true;
+    }
     delete lcid;
-    delete id;
-    return true;
   }
-  delete lcid;
   delete id;
   return false;
 }

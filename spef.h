@@ -468,7 +468,7 @@ class Spef {
    * @return true if the specified net name is
    * associated with parasitics, false otherwise
    */
-  bool isSplit (const char *s);
+  bool isSplit (const char *s, bool case_insensitive = true);
 
   /**
    * Print out the parasitics to a file

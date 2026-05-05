@@ -1434,6 +1434,9 @@ static int _valid_id_chars (char *s)
     else if ((*s) == '\\' && _valid_escaped_chars (*(s+1))) {
       s += 2;
     }
+    else if ((*s) == '\\' && !*(s+1)) {
+      s++;
+    }
     else {
       return 0;
     }
@@ -1465,6 +1468,28 @@ char *Spef::_getTokId()
     while (strlen (lex_tokenstring (_l)) + buflen + 1 > bufsz) {
       bufsz *= 2;
       REALLOC (curbuf, char, bufsz);
+    }
+    while (strcmp (lex_tokenstring (_l), "\\") == 0) {
+      lex_getsym (_l);
+      if (strcmp (lex_whitespace (_l), "") != 0) {
+	FREE (curbuf);
+	return NULL;
+      }
+      if (!_valid_escaped_chars (lex_tokenstring (_l)[0])) {
+	FREE (curbuf);
+	return NULL;
+      }
+      // stuff the escaped character
+      while (strlen (lex_tokenstring (_l)) + buflen + 1 > bufsz) {
+	bufsz *= 2;
+	REALLOC (curbuf, char, bufsz);
+      }
+      snprintf (curbuf + buflen, bufsz - buflen, "%c", lex_tokenstring(_l)[0]);
+      buflen++;
+      if (lex_tokenstring (_l)[1]) {
+	warning ("Escaped character is an ID?");
+      }
+      lex_getsym (_l);
     }
     snprintf (curbuf + buflen, bufsz - buflen, "%s", lex_tokenstring (_l));
     buflen += strlen (curbuf + buflen);
@@ -1625,6 +1650,7 @@ ActId *Spef::_getTokPath ()
 {
   ActId *ret, *tmp;
   int isabs;
+  int isesc;
   
   ret = NULL;
 
@@ -1637,14 +1663,42 @@ ActId *Spef::_getTokPath ()
     isabs = 0;
   }
 
+  if (strcmp (lex_tokenstring (_l),"\\") == 0) {
+    isesc = 1;
+  }
+  else {
+    isesc = 0;
+  }
+
   if (_a) {
-    if (lex_sym (_l) != l_id && lex_sym (_l) != l_integer) {
+    if (isesc) {
+      lex_getsym (_l);
+    }
+    if (!isesc && (lex_sym (_l) != l_id && lex_sym (_l) != l_integer)) {
       lex_set_position (_l);
       lex_pop_position (_l);
       return NULL;
     }
-    ret = _strToId (lex_tokenstring (_l));
-
+    if (isesc && (strlen (lex_tokenstring (_l)) == 1)) {
+      char tmp = lex_tokenstring(_l)[0];
+      lex_getsym (_l);
+      if (lex_sym (_l) != l_id && lex_sym (_l) != l_integer) {
+	lex_set_position (_l);
+	lex_pop_position (_l);
+	return NULL;
+      }
+      else {
+	char *tbuf;
+	int len = strlen (lex_tokenstring(_l)) + 2;
+	MALLOC (tbuf, char, len);
+	snprintf (tbuf, len, "%c%s", tmp, lex_tokenstring (_l));
+	ret = _strToId (tbuf);
+	FREE (tbuf);
+      }
+    }
+    else {
+      ret = _strToId (lex_tokenstring (_l));
+    }
     if (!ret) {
       lex_set_position (_l);
       lex_pop_position (_l);
